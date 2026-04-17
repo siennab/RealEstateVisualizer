@@ -1,0 +1,95 @@
+{
+  "app": {
+    "title": "History of Homes",
+    "subtitle": "Milwaukee"
+  },
+  "eras": {
+    "early": "Early Settlement",
+    "gilded": "Gilded Age",
+    "victorian": "Late Victorian",
+    "craftsman": "Craftsman Era",
+    "depression": "Interwar",
+    "midcentury": "Mid-Century",
+    "modernist": "Modernist",
+    "revival": "New Traditional",
+    "contemp": "Contemporary"
+  },
+  "styles": {
+    "greek_revival": "Greek Revival Cottage",
+    "timber_frame": "Timber Frame",
+    "federal": "Federal",
+    "italianate": "Italianate",
+    "second_empire": "Second Empire",
+    "queen_anne": "Queen Anne",
+    "cream_city": "Cream City Brick",
+    "polish_flat": "Polish Flat",
+    "gothic_revival": "Gothic Revival",
+    "craftsman_bungalow": "Craftsman Bungalow",
+    "foursquare": "American Foursquare",
+    "prairie": "Prairie School",
+    "tudor_revival": "Tudor Revival",
+    "minimal_trad": "Minimal Traditional",
+    "cape_cod": "Cape Cod",
+    "art_deco": "Art Deco Duplex",
+    "ranch": "Ranch",
+    "split_level": "Split-Level",
+    "mcm": "Mid-Century Modern",
+    "raised_ranch": "Raised Ranch",
+    "contemp_ranch": "Contemporary Ranch",
+    "colonial_revival": "Colonial Revival",
+    "tri_level": "Tri-Level",
+    "neo_trad": "Neo-Traditional",
+    "mcmansion": "McMansion",
+    "new_urbanist": "New Urbanist Townhome",
+    "modern_farmhouse": "Modern Farmhouse",
+    "infill_modern": "Infill Modern",
+    "passive_house": "Passive House",
+    "loft": "Loft Conversion"
+  },
+  "controls": {
+    "play": "Play",
+    "pause": "Pause",
+    "reset": "Reset",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "recenter": "Recenter",
+    "resetTo1850": "Reset to 1850"
+  },
+  "playback": {
+    "watching": "Watching the city grow\u2026",
+    "presentDay": "Present day",
+    "tapToPlay": "Tap play to time-travel",
+    "homesBuiltIn": "homes built in",
+    "noConstruction": "No new construction in",
+    "homesBuilt": "homes built"
+  },
+  "counter": {
+    "homesBuilt": "homes built"
+  },
+  "map": {
+    "lakeMichigan": "LAKE MICHIGAN",
+    "yankeeHill": "YANKEE HILL",
+    "westown": "WESTOWN",
+    "thirdWard": "THIRD WARD",
+    "menomoneValley": "MENOMONEE VLY",
+    "scale": "\u00bc mi",
+    "locationBadge": "Near Historic Third Ward",
+    "downtown": "1 mi \u00b7 Downtown Milwaukee"
+  },
+  "timeline": {
+    "now": "NOW"
+  },
+  "sheet": {
+    "photoPending": "photo pending",
+    "year": "Year",
+    "beds": "Beds",
+    "sqft": "Sq Ft",
+    "yearPrefix": "\u25f7 c."
+  },
+  "location": {
+    "badge": "Near Historic Third Ward"
+  },
+  "ios": {
+    "statusTime": "9:41"
+  }
+}
