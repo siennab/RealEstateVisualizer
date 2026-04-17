@@ -1,13 +1,6 @@
 import { LitElement, html } from 'lit'
 import mapboxgl from 'mapbox-gl'
 import { ERAS } from '../store.js'
-import { viewportCandidates, ensureZipsForViewport } from '../services/mprop-data.js'
-import { enqueueMany, onGeocoded } from '../services/geocoding-service.js'
-
-// Cap how many addresses we send to Mapbox per pan idle event,
-// plus how many "refill" rounds can chain off of one idle before we stop.
-const GEOCODE_BUDGET_PER_IDLE = 80
-const MAX_REFILL_CHAIN = 8
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
@@ -21,8 +14,6 @@ const STYLE_FOR_THEME = {
   mint:     'mapbox://styles/mapbox/light-v11',
   midnight: 'mapbox://styles/mapbox/dark-v11',
 }
-
-const EMPTY_FC = { type: 'FeatureCollection', features: [] }
 
 function homeToFeature(h, newThisYear) {
   return {
@@ -75,11 +66,6 @@ customElements.define('map-view', class extends LitElement {
   #map = null
   #mapReady = false
   #currentStyle = null
-  #prevHomeIds = new Set()
-  #entranceTimer = null
-  #unsubGeocode = null
-  #refillScheduled = false
-  #refillChain = 0
   #viewportCountTimer = null
 
   connectedCallback() {
@@ -90,8 +76,6 @@ customElements.define('map-view', class extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
-    this.#unsubGeocode?.()
-    this.#unsubGeocode = null
     if (this.#map) {
       this.#map.remove()
       this.#map = null
@@ -134,12 +118,6 @@ customElements.define('map-view', class extends LitElement {
         data: homesToGeoJSON(this.homes, this.newThisYear),
       })
 
-      // Entrance source for animating in new pins
-      this.#map.addSource('homes-entrance', {
-        type: 'geojson',
-        data: EMPTY_FC,
-      })
-
       // Glow layer for newly-built homes
       this.#map.addLayer({
         id: 'homes-glow',
@@ -154,12 +132,11 @@ customElements.define('map-view', class extends LitElement {
         },
       })
 
-      // Main circle layer — hides pins that are animating in
+      // Main circle layer
       this.#map.addLayer({
         id: 'homes-circles',
         type: 'circle',
         source: 'homes',
-        filter: ['!=', ['get', 'hidden'], true],
         paint: {
           'circle-radius': [
             'case',
@@ -172,40 +149,6 @@ customElements.define('map-view', class extends LitElement {
           'circle-opacity': 0.9,
         },
       })
-
-      // Entrance glow layer (animates in)
-      this.#map.addLayer({
-        id: 'homes-entrance-glow',
-        type: 'circle',
-        source: 'homes-entrance',
-        filter: ['==', ['get', 'isNew'], true],
-        paint: {
-          'circle-radius': 0,
-          'circle-radius-transition': { duration: 0 },
-          'circle-color': ['get', 'color'],
-          'circle-opacity': 0.25,
-          'circle-blur': 0.8,
-        },
-      })
-
-      // Entrance circle layer (animates in)
-      this.#map.addLayer({
-        id: 'homes-entrance-circles',
-        type: 'circle',
-        source: 'homes-entrance',
-        paint: {
-          'circle-radius': 0,
-          'circle-radius-transition': { duration: 0 },
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 3,
-          'circle-stroke-color': this.theme?.bg || '#FEF6E4',
-          'circle-opacity': 0,
-          'circle-opacity-transition': { duration: 0 },
-        },
-      })
-
-      // Seed previous IDs so the initial load doesn't animate
-      this.#prevHomeIds = new Set((this.homes || []).map(h => h.id))
 
       // Click on a pin
       this.#map.on('click', 'homes-circles', (e) => {
@@ -240,15 +183,6 @@ customElements.define('map-view', class extends LitElement {
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
       })
-
-      // Geocode addresses as the viewport changes
-      ensureZipsForViewport().then(() => this.#requestGeocodes(true))
-      this.#map.on('moveend', () => this.#requestGeocodes(true))
-
-      // When new pins arrive, a previously-unknown street may now be visible.
-      // Refill the geocode queue (debounced) up to a bounded chain length so
-      // the map self-completes within a few seconds of panning.
-      this.#unsubGeocode = onGeocoded(() => this.#scheduleRefill())
     })
   }
 
@@ -268,51 +202,6 @@ customElements.define('map-view', class extends LitElement {
     }, 300)
   }
 
-  #scheduleRefill() {
-    if (this.#refillScheduled) return
-    this.#refillScheduled = true
-    setTimeout(() => {
-      this.#refillScheduled = false
-      this.#requestGeocodes(false)
-    }, 400)
-  }
-
-  #requestGeocodes(isFreshIdle) {
-    if (!this.#map || !this.#mapReady) return
-    if (isFreshIdle) this.#refillChain = 0
-    if (this.#refillChain >= MAX_REFILL_CHAIN) return
-    this.#refillChain++
-
-    const b = this.#map.getBounds()
-    const bounds = {
-      west: b.getWest(),
-      east: b.getEast(),
-      south: b.getSouth(),
-      north: b.getNorth(),
-    }
-    const { primary, seed } = viewportCandidates(bounds)
-    if (primary.length === 0 && seed.length === 0) return
-
-    const budget = GEOCODE_BUDGET_PER_IDLE
-    const picks = []
-    const shuffle = (arr) => {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[arr[i], arr[j]] = [arr[j], arr[i]]
-      }
-      return arr
-    }
-    for (const r of shuffle([...primary])) {
-      if (picks.length >= budget) break
-      picks.push(r)
-    }
-    for (const r of shuffle([...seed])) {
-      if (picks.length >= budget) break
-      picks.push(r)
-    }
-    if (picks.length) enqueueMany(picks.map(r => r.address))
-  }
-
   #resolveThemeKey() {
     const t = this.theme
     if (!t) return 'cream'
@@ -326,66 +215,8 @@ customElements.define('map-view', class extends LitElement {
 
     // Update GeoJSON data when homes or newThisYear change
     if (changed.has('homes') || changed.has('newThisYear') || changed.has('year')) {
-      const homes = this.homes || []
-      const currentIds = new Set(homes.map(h => h.id))
-      const freshHomes = homes.filter(h => !this.#prevHomeIds.has(h.id))
-      const freshIds = new Set(freshHomes.map(h => h.id))
-      const hasFresh = freshHomes.length > 0 && this.#prevHomeIds.size > 0
-
-      // Build main GeoJSON — mark fresh homes as hidden during animation
-      const mainFC = {
-        type: 'FeatureCollection',
-        features: homes.map(h => {
-          const f = homeToFeature(h, this.newThisYear)
-          if (hasFresh && freshIds.has(h.id)) f.properties.hidden = true
-          return f
-        }),
-      }
-
-      const mainSrc = this.#map.getSource('homes')
-      const entranceSrc = this.#map.getSource('homes-entrance')
-      if (mainSrc) mainSrc.setData(mainFC)
-
-      if (hasFresh && entranceSrc) {
-        // Set entrance data
-        entranceSrc.setData({
-          type: 'FeatureCollection',
-          features: freshHomes.map(h => homeToFeature(h, this.newThisYear)),
-        })
-
-        // Reset entrance layers to radius 0 instantly
-        this.#map.setPaintProperty('homes-entrance-circles', 'circle-radius-transition', { duration: 0 })
-        this.#map.setPaintProperty('homes-entrance-circles', 'circle-opacity-transition', { duration: 0 })
-        this.#map.setPaintProperty('homes-entrance-circles', 'circle-radius', 0)
-        this.#map.setPaintProperty('homes-entrance-circles', 'circle-opacity', 0)
-        this.#map.setPaintProperty('homes-entrance-glow', 'circle-radius-transition', { duration: 0 })
-        this.#map.setPaintProperty('homes-entrance-glow', 'circle-radius', 0)
-
-        // Next frame: enable transitions and animate to full size
-        requestAnimationFrame(() => {
-          if (!this.#map) return
-          this.#map.setPaintProperty('homes-entrance-circles', 'circle-radius-transition', { duration: 350, delay: 0 })
-          this.#map.setPaintProperty('homes-entrance-circles', 'circle-opacity-transition', { duration: 250, delay: 0 })
-          this.#map.setPaintProperty('homes-entrance-circles', 'circle-radius', 9)
-          this.#map.setPaintProperty('homes-entrance-circles', 'circle-opacity', 0.9)
-          this.#map.setPaintProperty('homes-entrance-glow', 'circle-radius-transition', { duration: 400, delay: 0 })
-          this.#map.setPaintProperty('homes-entrance-glow', 'circle-radius', 24)
-        })
-
-        // After animation: un-hide from main layer, clear entrance
-        clearTimeout(this.#entranceTimer)
-        this.#entranceTimer = setTimeout(() => {
-          if (!this.#map || !this.#mapReady) return
-          // Update main source without hidden flags
-          const src = this.#map.getSource('homes')
-          if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
-          // Clear entrance
-          const eSrc = this.#map.getSource('homes-entrance')
-          if (eSrc) eSrc.setData(EMPTY_FC)
-        }, 420)
-      }
-
-      this.#prevHomeIds = currentIds
+      const src = this.#map.getSource('homes')
+      if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
 
       // Update viewport count after data change
       requestAnimationFrame(() => this.#emitViewportCount())
@@ -400,9 +231,6 @@ customElements.define('map-view', class extends LitElement {
       if (this.#map.getLayer('homes-circles')) {
         this.#map.setPaintProperty('homes-circles', 'circle-stroke-color', this.theme.bg)
       }
-      if (this.#map.getLayer('homes-entrance-circles')) {
-        this.#map.setPaintProperty('homes-entrance-circles', 'circle-stroke-color', this.theme.bg)
-      }
 
       // Switch Mapbox base style if theme category changed
       if (newStyle !== this.#currentStyle) {
@@ -412,10 +240,6 @@ customElements.define('map-view', class extends LitElement {
           this.#map.addSource('homes', {
             type: 'geojson',
             data: homesToGeoJSON(this.homes, this.newThisYear),
-          })
-          this.#map.addSource('homes-entrance', {
-            type: 'geojson',
-            data: EMPTY_FC,
           })
           this.#map.addLayer({
             id: 'homes-glow',
@@ -433,40 +257,12 @@ customElements.define('map-view', class extends LitElement {
             id: 'homes-circles',
             type: 'circle',
             source: 'homes',
-            filter: ['!=', ['get', 'hidden'], true],
             paint: {
               'circle-radius': ['case', ['==', ['get', 'isNew'], true], 12, 9],
               'circle-color': ['get', 'color'],
               'circle-stroke-width': 3,
               'circle-stroke-color': this.theme.bg,
               'circle-opacity': 0.9,
-            },
-          })
-          this.#map.addLayer({
-            id: 'homes-entrance-glow',
-            type: 'circle',
-            source: 'homes-entrance',
-            filter: ['==', ['get', 'isNew'], true],
-            paint: {
-              'circle-radius': 0,
-              'circle-radius-transition': { duration: 0 },
-              'circle-color': ['get', 'color'],
-              'circle-opacity': 0.25,
-              'circle-blur': 0.8,
-            },
-          })
-          this.#map.addLayer({
-            id: 'homes-entrance-circles',
-            type: 'circle',
-            source: 'homes-entrance',
-            paint: {
-              'circle-radius': 0,
-              'circle-radius-transition': { duration: 0 },
-              'circle-color': ['get', 'color'],
-              'circle-stroke-width': 3,
-              'circle-stroke-color': this.theme.bg,
-              'circle-opacity': 0,
-              'circle-opacity-transition': { duration: 0 },
             },
           })
         })

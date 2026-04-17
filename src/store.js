@@ -1,5 +1,5 @@
 import { ERAS, eraFor } from './data/sample-data.js'
-import { init as initMprop, geocodedVisible, onChange as onMpropChange } from './services/mprop-data.js'
+import { init as initMprop, allRecords } from './services/mprop-data.js'
 
 export { ERAS, eraFor }
 
@@ -15,9 +15,7 @@ class AppStore {
   #playTimer = null
 
   constructor() {
-    // Kick off MPROP load; re-notify subscribers whenever more coords arrive.
     initMprop().then(() => this.#set({ dataReady: true }))
-    onMpropChange(() => this.#notify())
   }
 
   get state() { return { ...this.#state } }
@@ -64,11 +62,11 @@ class AppStore {
   }
 
   visibleHomes(year = this.#state.year) {
-    return geocodedVisible(y => y <= year)
+    return allRecords().filter(r => r.year <= year)
   }
 
   newThisYear(year = this.#state.year) {
-    return new Set(geocodedVisible(y => y === year).map(h => h.id))
+    return new Set(allRecords().filter(r => r.year === year).map(h => h.id))
   }
 }
 

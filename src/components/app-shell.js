@@ -2,9 +2,6 @@ import { LitElement, html } from 'lit'
 import { store, ERAS, eraFor } from '../store.js'
 import { THEMES, applyTheme } from '../styles/themes.js'
 import { HOMES } from '../data/sample-data.js'
-import { geocodeCache } from '../services/geocode-cache.js'
-import { allRecords } from '../services/mprop-data.js'
-import { pendingCount } from '../services/geocoding-service.js'
 
 // Import all child components
 import './map-view.js'
@@ -120,18 +117,11 @@ customElements.define('app-shell', class extends LitElement {
     store.reset()
   }
 
-  async #onExportCache() {
-    await geocodeCache.downloadJSON()
-  }
-
   #renderAppContent() {
     const t = this.#theme
     const s = this.#state
     const homes = this.#visibleHomes
     const newSet = this.#newThisYearSet
-    const totalRecords = allRecords().length
-    const geocodedCount = homes.length
-    const inFlight = pendingCount()
 
     return html`
       <div style="
@@ -157,44 +147,6 @@ customElements.define('app-shell', class extends LitElement {
             @viewport-count=${this.#onViewportCount.bind(this)}
             style="position:absolute;inset:0;"
           ></map-view>
-
-          <!-- Geocode status + export -->
-          <div style="
-            position:absolute;
-            top:12px;
-            right:12px;
-            z-index:3;
-            display:flex;
-            gap:6px;
-            align-items:center;
-          ">
-            <div style="
-              background:${t.sheet};
-              color:${t.ink};
-              border-radius:999px;
-              padding:6px 10px;
-              font-size:11px;
-              font-family:ui-monospace,'SF Mono',monospace;
-              box-shadow:0 2px 10px rgba(0,0,0,0.08),0 0 0 0.5px rgba(0,0,0,0.04);
-            ">
-              ${geocodedCount.toLocaleString()} / ${totalRecords.toLocaleString()} geocoded${inFlight > 0 ? ` · ${inFlight} in flight` : ''}
-            </div>
-            <button
-              @click=${this.#onExportCache.bind(this)}
-              style="
-                background:${t.sheet};
-                color:${t.ink};
-                border:none;
-                border-radius:999px;
-                padding:6px 12px;
-                font-size:11px;
-                font-weight:600;
-                cursor:pointer;
-                box-shadow:0 2px 10px rgba(0,0,0,0.08),0 0 0 0.5px rgba(0,0,0,0.04);
-              "
-              title="Download geocoded addresses as JSON"
-            >Export cache</button>
-          </div>
         </div>
 
         <!-- PANEL -->
