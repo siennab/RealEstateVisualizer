@@ -384,39 +384,9 @@ customElements.define('map-view', class extends LitElement {
           width: 36px !important;
           height: 36px !important;
         }
-        map-view .map-badge {
-          position: absolute;
-          top: 12px;
-          left: 12px;
-          z-index: 2;
-          pointer-events: none;
-        }
-        map-view .map-badge-inner {
-          background: ${t.sheet || '#fff'};
-          border-radius: 999px;
-          padding: 6px 12px 6px 10px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04);
-          font-size: 12px;
-          font-weight: 600;
-          color: ${t.ink || '#000'};
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          pointer-events: auto;
-        }
       </style>
 
       <div class="mapbox-container"></div>
-
-      <div class="map-badge">
-        <div class="map-badge-inner">
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <circle cx="6" cy="6" r="5" fill="none" stroke="${t.ink || '#000'}" stroke-width="1.2"/>
-            <circle cx="6" cy="6" r="1.5" fill="${t.ink || '#000'}"/>
-          </svg>
-          Downtown Milwaukee
-        </div>
-      </div>
     `
   }
 })
