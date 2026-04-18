@@ -14,6 +14,7 @@ customElements.define('era-rail', class extends LitElement {
       padding: 0 16px;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-x manipulation;
     }
     .rail::-webkit-scrollbar { display: none; }
     .chip {
@@ -31,6 +32,8 @@ customElements.define('era-rail', class extends LitElement {
       font-family: 'Geist', -apple-system, sans-serif;
       white-space: nowrap;
       transition: transform 180ms, background 180ms;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .chip-dot {
       width: 8px;
@@ -86,6 +89,10 @@ customElements.define('era-rail', class extends LitElement {
     }))
   }
 
+  #onPreventBrowserZoom(e) {
+    e.preventDefault()
+  }
+
   render() {
     const t = this.theme || {}
     const current = eraFor(this.year || 1850)
@@ -100,6 +107,7 @@ customElements.define('era-rail', class extends LitElement {
               class="chip"
               data-era="${era.id}"
               @click=${() => this.#onChipClick(era)}
+              @dblclick=${this.#onPreventBrowserZoom}
               style="
                 background: ${active ? t.ink : t.chip};
                 color: ${active ? t.bg : t.ink};

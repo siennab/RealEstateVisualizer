@@ -7,7 +7,7 @@ customElements.define('play-controls', class extends LitElement {
       display: flex;
       gap: 10px;
       align-items: center;
-      padding: 14px 20px 4px;
+      padding: 14px 20px 20px;
     }
     .play-btn {
       width: 52px;

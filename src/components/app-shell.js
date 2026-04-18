@@ -118,11 +118,13 @@ customElements.define('app-shell', class extends LitElement {
     if (this.#state.playing) {
       store.pause()
     } else {
+      store.clearIsolatedEra()
       store.play()
     }
   }
 
   #onPlayReset() {
+    store.clearIsolatedEra()
     store.reset()
   }
 
@@ -162,14 +164,14 @@ customElements.define('app-shell', class extends LitElement {
         <!-- PANEL -->
         <div style="
           flex:0 0 auto;
-          max-height:${this.#isDesktop ? '280px' : '38%'};
-          min-height:200px;
+          max-height:${this.#isDesktop ? '280px' : '44%'};
+          min-height:${this.#isDesktop ? '200px' : '244px'};
           background:${t.bg};
           border-top:1px solid ${t.ink}12;
           box-shadow:0 -4px 20px rgba(0,0,0,0.04);
           display:flex;
           flex-direction:column;
-          padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);
+          padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 40px);
           overflow:hidden;
         ">
           <hero-counter
