@@ -128,6 +128,7 @@ customElements.define('app-shell', class extends LitElement {
         position:relative;
         width:100%;
         height:100%;
+        min-height:0;
         background:${t.bg};
         font-family:'Geist',-apple-system,system-ui,sans-serif;
         color:${t.ink};
@@ -159,7 +160,7 @@ customElements.define('app-shell', class extends LitElement {
           box-shadow:0 -4px 20px rgba(0,0,0,0.04);
           display:flex;
           flex-direction:column;
-          padding-bottom:env(safe-area-inset-bottom, 8px);
+          padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 8px);
           overflow:hidden;
         ">
           <hero-counter
@@ -211,8 +212,11 @@ customElements.define('app-shell', class extends LitElement {
     return html`
       <div style="
         position:fixed;inset:0;
+        height:100vh;
+        height:100dvh;
         display:flex;flex-direction:column;
         background:${t.bg};
+        overflow:hidden;
       ">
         ${this.#renderAppContent()}
       </div>

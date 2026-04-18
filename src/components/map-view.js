@@ -5,7 +5,7 @@ import { ERAS } from '../store.js'
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
 const ZOOM = 17
-const MIN_ZOOM = 16
+const MIN_ZOOM = 5
 const MAX_ZOOM = 19
 
 // Map Mapbox base styles to themes
@@ -67,6 +67,9 @@ customElements.define('map-view', class extends LitElement {
   #mapReady = false
   #currentStyle = null
   #viewportCountTimer = null
+  #resizeFrame = 0
+  #resizeObserver = null
+  #handleViewportResize = () => this.#scheduleResize()
 
   connectedCallback() {
     super.connectedCallback()
@@ -76,6 +79,10 @@ customElements.define('map-view', class extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
+    if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame)
+    this.#resizeObserver?.disconnect()
+    window.visualViewport?.removeEventListener('resize', this.#handleViewportResize)
+    window.removeEventListener('orientationchange', this.#handleViewportResize)
     if (this.#map) {
       this.#map.remove()
       this.#map = null
@@ -86,6 +93,11 @@ customElements.define('map-view', class extends LitElement {
   #initMap() {
     const container = this.querySelector('.mapbox-container')
     if (!container || this.#map) return
+
+    this.#resizeObserver = new ResizeObserver(() => this.#scheduleResize())
+    this.#resizeObserver.observe(container)
+    window.visualViewport?.addEventListener('resize', this.#handleViewportResize)
+    window.addEventListener('orientationchange', this.#handleViewportResize)
 
     mapboxgl.accessToken = MAPBOX_TOKEN
     const styleName = this.theme?.name || ''
@@ -111,6 +123,7 @@ customElements.define('map-view', class extends LitElement {
 
     this.#map.on('load', () => {
       this.#mapReady = true
+      this.#scheduleResize()
 
       // GeoJSON source for all homes
       this.#map.addSource('homes', {
@@ -183,6 +196,15 @@ customElements.define('map-view', class extends LitElement {
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
       })
+    })
+  }
+
+  #scheduleResize() {
+    if (!this.#map) return
+    if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame)
+    this.#resizeFrame = requestAnimationFrame(() => {
+      this.#resizeFrame = 0
+      this.#map?.resize()
     })
   }
 
@@ -285,6 +307,9 @@ customElements.define('map-view', class extends LitElement {
         map-view .mapbox-container {
           position: absolute;
           inset: 0;
+          width: 100%;
+          height: 100%;
+          min-height: 100%;
         }
         map-view .mapboxgl-ctrl-group {
           border-radius: 14px !important;

@@ -32,8 +32,8 @@ const SPARK_PATH = buildSparkPath()
 customElements.define('time-slider', class extends LitElement {
   static styles = css`
     :host { display: block; }
-    .wrap { padding: 0 20px; }
-    .era-zones { position: relative; height: 4px; margin-bottom: 2px; }
+    .wrap { padding: 12px 20px 0; }
+    .era-zones { position: relative; height: 4px; margin-bottom: 6px; }
     .era-zone {
       position: absolute;
       top: 0;
