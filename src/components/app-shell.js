@@ -97,11 +97,20 @@ customElements.define('app-shell', class extends LitElement {
   #onEraSelected(e) {
     const era = e.detail.era
     store.pause()
+    store.clearIsolatedEra()
     store.setYear(Math.round((era.start + era.end) / 2))
+  }
+
+  #onEraIsolationToggled(e) {
+    const era = e.detail.era
+    store.pause()
+    store.setYear(era.end)
+    store.toggleIsolatedEra(era.id)
   }
 
   #onYearChanged(e) {
     store.pause()
+    store.clearIsolatedEra()
     store.setYear(e.detail.year)
   }
 
@@ -160,7 +169,7 @@ customElements.define('app-shell', class extends LitElement {
           box-shadow:0 -4px 20px rgba(0,0,0,0.04);
           display:flex;
           flex-direction:column;
-          padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 8px);
+          padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 18px);
           overflow:hidden;
         ">
           <hero-counter
@@ -173,7 +182,9 @@ customElements.define('app-shell', class extends LitElement {
             <era-rail
               .year=${s.year}
               .theme=${t}
+              .isolatedEraId=${s.isolatedEraId}
               @era-selected=${this.#onEraSelected.bind(this)}
+              @era-isolation-toggled=${this.#onEraIsolationToggled.bind(this)}
             ></era-rail>
           </div>
 

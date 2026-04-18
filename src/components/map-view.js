@@ -7,6 +7,9 @@ const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
 const ZOOM = 17
 const MIN_ZOOM = 5
 const MAX_ZOOM = 19
+const CLUSTER_MIN_POINTS = 10
+const CLUSTER_MAX_ZOOM = 12
+const CLUSTER_RADIUS = 60
 
 // Map Mapbox base styles to themes
 const STYLE_FOR_THEME = {
@@ -125,77 +128,148 @@ customElements.define('map-view', class extends LitElement {
       this.#mapReady = true
       this.#scheduleResize()
 
-      // GeoJSON source for all homes
-      this.#map.addSource('homes', {
-        type: 'geojson',
-        data: homesToGeoJSON(this.homes, this.newThisYear),
-      })
-
-      // Glow layer for newly-built homes
-      this.#map.addLayer({
-        id: 'homes-glow',
-        type: 'circle',
-        source: 'homes',
-        filter: ['==', ['get', 'isNew'], true],
-        paint: {
-          'circle-radius': 24,
-          'circle-color': ['get', 'color'],
-          'circle-opacity': 0.25,
-          'circle-blur': 0.8,
-        },
-      })
-
-      // Main circle layer
-      this.#map.addLayer({
-        id: 'homes-circles',
-        type: 'circle',
-        source: 'homes',
-        paint: {
-          'circle-radius': [
-            'case',
-            ['==', ['get', 'isNew'], true], 12,
-            9,
-          ],
-          'circle-color': ['get', 'color'],
-          'circle-stroke-width': 3,
-          'circle-stroke-color': this.theme?.bg || '#FEF6E4',
-          'circle-opacity': 0.9,
-        },
-      })
-
-      // Click on a pin
-      this.#map.on('click', 'homes-circles', (e) => {
-        if (!e.features || !e.features.length) return
-        e.originalEvent.stopPropagation()
-        const props = e.features[0].properties
-        this.dispatchEvent(new CustomEvent('property-selected', {
-          detail: { property: featureToHome(props) },
-          bubbles: true,
-          composed: true,
-        }))
-      })
-
-      // Click on empty map area
-      this.#map.on('click', (e) => {
-        // Check if we hit a pin (the layer click handler fires first with stopPropagation)
-        const features = this.#map.queryRenderedFeatures(e.point, { layers: ['homes-circles'] })
-        if (features.length === 0) {
-          this.dispatchEvent(new CustomEvent('map-clicked', { bubbles: true, composed: true }))
-        }
-      })
-
-      // Pointer cursor on pins
-      this.#map.on('mouseenter', 'homes-circles', () => {
-        this.#map.getCanvas().style.cursor = 'pointer'
-      })
-      this.#map.on('mouseleave', 'homes-circles', () => {
-        this.#map.getCanvas().style.cursor = ''
-      })
+      this.#installMapLayers()
+      this.#bindMapEvents()
 
       // Emit viewport count on move and data changes
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
       })
+    })
+  }
+
+  #installMapLayers() {
+    if (!this.#map) return
+
+    this.#map.addSource('homes', {
+      type: 'geojson',
+      data: homesToGeoJSON(this.homes, this.newThisYear),
+      cluster: true,
+      clusterMinPoints: CLUSTER_MIN_POINTS,
+      clusterMaxZoom: CLUSTER_MAX_ZOOM,
+      clusterRadius: CLUSTER_RADIUS,
+    })
+
+    this.#map.addLayer({
+      id: 'homes-glow',
+      type: 'circle',
+      source: 'homes',
+      filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
+      paint: {
+        'circle-radius': 24,
+        'circle-color': ['get', 'color'],
+        'circle-opacity': 0.25,
+        'circle-blur': 0.8,
+      },
+    })
+
+    this.#map.addLayer({
+      id: 'homes-clusters',
+      type: 'circle',
+      source: 'homes',
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': this.theme?.ink || '#1B2238',
+        'circle-opacity': 0.16,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': this.theme?.bg || '#FEF6E4',
+        'circle-radius': [
+          'step',
+          ['get', 'point_count'],
+          22,
+          20, 28,
+          40, 36,
+          80, 46,
+          160, 56,
+        ],
+      },
+    })
+
+    this.#map.addLayer({
+      id: 'homes-cluster-count',
+      type: 'symbol',
+      source: 'homes',
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['get', 'point_count_abbreviated'],
+        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+        'text-size': [
+          'step',
+          ['get', 'point_count'],
+          14,
+          40, 16,
+          120, 18,
+        ],
+      },
+      paint: {
+        'text-color': this.theme?.ink || '#1B2238',
+      },
+    })
+
+    this.#map.addLayer({
+      id: 'homes-circles',
+      type: 'circle',
+      source: 'homes',
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-radius': [
+          'case',
+          ['==', ['get', 'isNew'], true], 12,
+          9,
+        ],
+        'circle-color': ['get', 'color'],
+        'circle-stroke-width': 3,
+        'circle-stroke-color': this.theme?.bg || '#FEF6E4',
+        'circle-opacity': 0.9,
+      },
+    })
+  }
+
+  #bindMapEvents() {
+    if (!this.#map) return
+
+    this.#map.on('click', 'homes-circles', (e) => {
+      if (!e.features || !e.features.length) return
+      e.originalEvent.stopPropagation()
+      const props = e.features[0].properties
+      this.dispatchEvent(new CustomEvent('property-selected', {
+        detail: { property: featureToHome(props) },
+        bubbles: true,
+        composed: true,
+      }))
+    })
+
+    this.#map.on('click', 'homes-clusters', (e) => {
+      const cluster = e.features?.[0]
+      if (!cluster) return
+      e.originalEvent.stopPropagation()
+      const source = this.#map.getSource('homes')
+      source.getClusterExpansionZoom(cluster.properties.cluster_id, (err, zoom) => {
+        if (err) return
+        this.#map.easeTo({ center: cluster.geometry.coordinates, zoom })
+      })
+    })
+
+    this.#map.on('click', (e) => {
+      const features = this.#map.queryRenderedFeatures(e.point, {
+        layers: ['homes-circles', 'homes-clusters'],
+      })
+      if (features.length === 0) {
+        this.dispatchEvent(new CustomEvent('map-clicked', { bubbles: true, composed: true }))
+      }
+    })
+
+    this.#map.on('mouseenter', 'homes-circles', () => {
+      this.#map.getCanvas().style.cursor = 'pointer'
+    })
+    this.#map.on('mouseleave', 'homes-circles', () => {
+      this.#map.getCanvas().style.cursor = ''
+    })
+    this.#map.on('mouseenter', 'homes-clusters', () => {
+      this.#map.getCanvas().style.cursor = 'pointer'
+    })
+    this.#map.on('mouseleave', 'homes-clusters', () => {
+      this.#map.getCanvas().style.cursor = ''
     })
   }
 
@@ -214,10 +288,21 @@ customElements.define('map-view', class extends LitElement {
     this.#viewportCountTimer = setTimeout(() => {
       this.#viewportCountTimer = null
       if (!this.#map || !this.#mapReady) return
-      const features = this.#map.queryRenderedFeatures({ layers: ['homes-circles'] })
-      const unique = new Set(features.map(f => f.properties.id))
+      const features = this.#map.queryRenderedFeatures(undefined, {
+        layers: ['homes-circles', 'homes-clusters'],
+      })
+      let count = 0
+      const unique = new Set()
+      features.forEach(feature => {
+        const pointCount = feature.properties?.point_count
+        if (pointCount != null) {
+          count += Number(pointCount)
+          return
+        }
+        unique.add(feature.properties.id)
+      })
       this.dispatchEvent(new CustomEvent('viewport-count', {
-        detail: { count: unique.size },
+        detail: { count: count + unique.size },
         bubbles: true,
         composed: true,
       }))
@@ -253,40 +338,19 @@ customElements.define('map-view', class extends LitElement {
       if (this.#map.getLayer('homes-circles')) {
         this.#map.setPaintProperty('homes-circles', 'circle-stroke-color', this.theme.bg)
       }
+      if (this.#map.getLayer('homes-clusters')) {
+        this.#map.setPaintProperty('homes-clusters', 'circle-color', this.theme.ink)
+        this.#map.setPaintProperty('homes-clusters', 'circle-stroke-color', this.theme.bg)
+      }
+      if (this.#map.getLayer('homes-cluster-count')) {
+        this.#map.setPaintProperty('homes-cluster-count', 'text-color', this.theme.ink)
+      }
 
       // Switch Mapbox base style if theme category changed
       if (newStyle !== this.#currentStyle) {
         this.#currentStyle = newStyle
         this.#map.once('style.load', () => {
-          // Re-add sources and layers after style swap
-          this.#map.addSource('homes', {
-            type: 'geojson',
-            data: homesToGeoJSON(this.homes, this.newThisYear),
-          })
-          this.#map.addLayer({
-            id: 'homes-glow',
-            type: 'circle',
-            source: 'homes',
-            filter: ['==', ['get', 'isNew'], true],
-            paint: {
-              'circle-radius': 24,
-              'circle-color': ['get', 'color'],
-              'circle-opacity': 0.25,
-              'circle-blur': 0.8,
-            },
-          })
-          this.#map.addLayer({
-            id: 'homes-circles',
-            type: 'circle',
-            source: 'homes',
-            paint: {
-              'circle-radius': ['case', ['==', ['get', 'isNew'], true], 12, 9],
-              'circle-color': ['get', 'color'],
-              'circle-stroke-width': 3,
-              'circle-stroke-color': this.theme.bg,
-              'circle-opacity': 0.9,
-            },
-          })
+          this.#installMapLayers()
         })
         this.#map.setStyle(newStyle)
       }

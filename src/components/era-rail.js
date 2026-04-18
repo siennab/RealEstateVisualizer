@@ -2,6 +2,8 @@ import { LitElement, html, css } from 'lit'
 import { ERAS, eraFor } from '../store.js'
 
 customElements.define('era-rail', class extends LitElement {
+  #lastTap = { eraId: null, time: 0 }
+
   static styles = css`
     :host { display: block; }
     .rail {
@@ -39,8 +41,9 @@ customElements.define('era-rail', class extends LitElement {
   `
 
   static properties = {
-    year:  { type: Number },
-    theme: { type: Object },
+    year:           { type: Number },
+    theme:          { type: Object },
+    isolatedEraId:  { type: String },
   }
 
   updated(changed) {
@@ -61,6 +64,21 @@ customElements.define('era-rail', class extends LitElement {
   }
 
   #onChipClick(era) {
+    const now = performance.now()
+    const isDoubleTap = this.#lastTap.eraId === era.id && now - this.#lastTap.time < 320
+    this.#lastTap = isDoubleTap
+      ? { eraId: null, time: 0 }
+      : { eraId: era.id, time: now }
+
+    if (isDoubleTap) {
+      this.dispatchEvent(new CustomEvent('era-isolation-toggled', {
+        detail: { era },
+        bubbles: true,
+        composed: true,
+      }))
+      return
+    }
+
     this.dispatchEvent(new CustomEvent('era-selected', {
       detail: { era },
       bubbles: true,
@@ -76,6 +94,7 @@ customElements.define('era-rail', class extends LitElement {
       <div class="rail">
         ${ERAS.map(era => {
           const active = era.id === current.id
+          const isolated = era.id === this.isolatedEraId
           return html`
             <button
               class="chip"
@@ -84,17 +103,20 @@ customElements.define('era-rail', class extends LitElement {
               style="
                 background: ${active ? t.ink : t.chip};
                 color: ${active ? t.bg : t.ink};
-                box-shadow: ${active
-                  ? '0 4px 14px rgba(0,0,0,0.15)'
-                  : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.04)'};
-                transform: ${active ? 'scale(1.04)' : 'scale(1)'};
+                box-shadow: ${isolated
+                  ? `0 0 0 2px ${era.color} inset, 0 6px 18px rgba(0,0,0,0.14)`
+                  : active
+                    ? '0 4px 14px rgba(0,0,0,0.15)'
+                    : '0 1px 3px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.04)'};
+                transform: ${active || isolated ? 'scale(1.04)' : 'scale(1)'};
               "
+              aria-pressed="${isolated ? 'true' : 'false'}"
             >
               <span
                 class="chip-dot"
                 style="
                   background: ${era.color};
-                  box-shadow: ${active ? `0 0 0 2px ${t.bg}` : 'none'};
+                  box-shadow: ${active ? `0 0 0 2px ${t.bg}` : isolated ? `0 0 0 2px ${t.sheet || t.bg}` : 'none'};
                 "
               ></span>
               ${era.label}

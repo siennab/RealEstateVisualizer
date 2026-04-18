@@ -8,6 +8,7 @@ class AppStore {
     year: 1870,
     playing: false,
     theme: 'cream',
+    isolatedEraId: null,
     selectedProperty: null,
     dataReady: false,
   }
@@ -37,6 +38,14 @@ class AppStore {
 
   setYear(year) { this.#set({ year: Math.max(1850, Math.min(2026, year)) }) }
   setTheme(theme) { this.#set({ theme }) }
+  setIsolatedEra(eraId) { this.#set({ isolatedEraId: eraId ?? null, selectedProperty: null }) }
+  toggleIsolatedEra(eraId) {
+    this.#set({
+      isolatedEraId: this.#state.isolatedEraId === eraId ? null : eraId,
+      selectedProperty: null,
+    })
+  }
+  clearIsolatedEra() { this.#set({ isolatedEraId: null }) }
   selectProperty(p) { this.#set({ selectedProperty: p }) }
   deselectProperty() { this.#set({ selectedProperty: null }) }
 
@@ -62,11 +71,19 @@ class AppStore {
   }
 
   visibleHomes(year = this.#state.year) {
-    return allRecords().filter(r => r.year <= year)
+    return allRecords().filter(r => {
+      if (r.year > year) return false
+      if (!this.#state.isolatedEraId) return true
+      return r.era === this.#state.isolatedEraId
+    })
   }
 
   newThisYear(year = this.#state.year) {
-    return new Set(allRecords().filter(r => r.year === year).map(h => h.id))
+    return new Set(allRecords().filter(r => {
+      if (r.year !== year) return false
+      if (!this.#state.isolatedEraId) return true
+      return r.era === this.#state.isolatedEraId
+    }).map(h => h.id))
   }
 }
 
