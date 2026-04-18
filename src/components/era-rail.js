@@ -58,7 +58,7 @@ customElements.define('era-rail', class extends LitElement {
   #scrollToActive() {
     const rail = this.shadowRoot?.querySelector('.rail')
     if (!rail) return
-    const current = eraFor(this.year || 1850)
+    const current = eraFor(this.year || 1800)
     const el = rail.querySelector(`[data-era="${current.id}"]`)
     if (el) {
       const off = el.offsetLeft - rail.offsetWidth / 2 + el.offsetWidth / 2
@@ -95,7 +95,7 @@ customElements.define('era-rail', class extends LitElement {
 
   render() {
     const t = this.theme || {}
-    const current = eraFor(this.year || 1850)
+    const current = eraFor(this.year || 1800)
 
     return html`
       <div class="rail">

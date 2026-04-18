@@ -3,7 +3,7 @@
 // Map shows roughly 1 mile radius: lat ±0.0145, lng ±0.020
 
 export const ERAS = [
-  { id: 'early',      label: 'Early Settlement', start: 1850, end: 1869, color: '#C9A66B' },
+  { id: 'early',      label: 'Early Settlement', start: 1800, end: 1869, color: '#C9A66B' },
   { id: 'gilded',     label: 'Gilded Age',        start: 1870, end: 1899, color: '#B8860B' },
   { id: 'victorian',  label: 'Late Victorian',    start: 1880, end: 1910, color: '#8E4A7F' },
   { id: 'craftsman',  label: 'Craftsman Era',     start: 1905, end: 1929, color: '#A65A3A' },
@@ -73,7 +73,7 @@ export function generateHomes() {
   }
 
   let id = 0
-  for (let year = 1850; year <= 2026; year++) {
+  for (let year = 1800; year <= 2026; year++) {
     const w = weight(year)
     const count = Math.max(0, Math.round(w * (1.2 + rand() * 0.6)))
     for (let i = 0; i < count; i++) {

@@ -5,7 +5,7 @@ export { ERAS, eraFor }
 
 class AppStore {
   #state = {
-    year: 1870,
+    year: 1820,
     playing: false,
     theme: 'cream',
     isolatedEraId: null,
@@ -36,7 +36,7 @@ class AppStore {
     this.#notify()
   }
 
-  setYear(year) { this.#set({ year: Math.max(1850, Math.min(2026, year)) }) }
+  setYear(year) { this.#set({ year: Math.max(1800, Math.min(2026, year)) }) }
   setTheme(theme) { this.#set({ theme }) }
   setIsolatedEra(eraId) { this.#set({ isolatedEraId: eraId ?? null, selectedProperty: null }) }
   toggleIsolatedEra(eraId) {
@@ -51,7 +51,7 @@ class AppStore {
 
   play() {
     if (this.#state.playing) return
-    if (this.#state.year >= 2026) this.setYear(1850)
+    if (this.#state.year >= 2026) this.setYear(1800)
     this.#set({ playing: true })
     this.#playTimer = setInterval(() => {
       if (this.#state.year >= 2026) { this.pause(); return }
@@ -67,7 +67,7 @@ class AppStore {
 
   reset() {
     this.pause()
-    this.setYear(1850)
+    this.setYear(1800)
   }
 
   visibleHomes(year = this.#state.year) {

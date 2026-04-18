@@ -67,7 +67,7 @@ customElements.define('play-controls', class extends LitElement {
 
   render() {
     const t = this.theme || {}
-    const year = this.year || 1850
+    const year = this.year || 1800
     const newCount = this.newThisYear || 0
     const playing = this.playing
 
@@ -107,8 +107,8 @@ customElements.define('play-controls', class extends LitElement {
           class="reset-btn"
           style="background:${t.chip}"
           @click=${this.#onReset}
-          title="Reset to 1850"
-          aria-label="Reset to 1850"
+          title="Reset to 1800"
+          aria-label="Reset to 1800"
         >
           <svg width="14" height="14" viewBox="0 0 14 14">
             <path d="M2 4 A5 5 0 1 1 3 10" fill="none" stroke="${t.ink}" stroke-width="1.6" stroke-linecap="round"/>

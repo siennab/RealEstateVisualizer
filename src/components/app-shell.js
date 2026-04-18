@@ -15,7 +15,7 @@ import './play-controls.js'
 function buildCounts() {
   const arr = []
   let c = 0
-  for (let y = 1850; y <= 2026; y++) {
+  for (let y = 1800; y <= 2026; y++) {
     c += HOMES.filter(h => h.year === y).length
     if (y % 2 === 0) arr.push({ year: y, cumulative: c })
   }

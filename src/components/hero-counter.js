@@ -62,7 +62,7 @@ customElements.define('hero-counter', class extends LitElement {
 
   render() {
     const t = this.theme || {}
-    const era = eraFor(this.year || 1850)
+    const era = eraFor(this.year || 1800)
 
     return html`
       <div class="counter">
@@ -72,7 +72,7 @@ customElements.define('hero-counter', class extends LitElement {
             ${era.label}
           </div>
           <div class="year-display" style="color:${t.ink}">
-            ${this.year || 1850}
+            ${this.year || 1800}
           </div>
         </div>
         <div class="right">

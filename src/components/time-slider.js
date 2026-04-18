@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit'
 import { ERAS } from '../store.js'
 import { HOMES } from '../data/sample-data.js'
 
-const MIN = 1850
+const MIN = 1800
 const MAX = 2026
 
 // Pre-compute cumulative counts for sparkline
@@ -202,7 +202,7 @@ customElements.define('time-slider', class extends LitElement {
           <div class="track-fill" style="width:${pct * 100}%;background:${t.ink}"></div>
 
           <!-- decade ticks -->
-          ${[1850, 1875, 1900, 1925, 1950, 1975, 2000, 2025].map(y => {
+          ${[1800, 1825, 1850, 1875, 1900, 1925, 1950, 1975, 2000, 2025].map(y => {
             const p = (y - MIN) / (MAX - MIN)
             return html`
               <div
@@ -227,9 +227,8 @@ customElements.define('time-slider', class extends LitElement {
 
         <!-- year labels -->
         <div class="year-labels" style="color:${t.inkSoft}">
-          <span>1850</span>
+          <span>1800</span>
           <span>1900</span>
-          <span>1950</span>
           <span>2000</span>
           <span>NOW</span>
         </div>

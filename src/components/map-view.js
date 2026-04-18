@@ -1,15 +1,16 @@
 import { LitElement, html } from 'lit'
 import mapboxgl from 'mapbox-gl'
-import { ERAS } from '../store.js'
+import { ERAS, eraFor } from '../store.js'
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
 const ZOOM = 17
 const MIN_ZOOM = 5
 const MAX_ZOOM = 19
-const CLUSTER_MIN_POINTS = 10
-const CLUSTER_MAX_ZOOM = 12
-const CLUSTER_RADIUS = 60
+const CLUSTER_MIN_POINTS = 80
+const CLUSTER_MAX_ZOOM = 10
+const CLUSTER_RADIUS = 80
+const ERA_FADE_DELAY = 800
 
 // Map Mapbox base styles to themes
 const STYLE_FOR_THEME = {
@@ -73,6 +74,10 @@ customElements.define('map-view', class extends LitElement {
   #resizeFrame = 0
   #resizeObserver = null
   #handleViewportResize = () => this.#scheduleResize()
+  #eraFadeTimer = null
+  #eraSettleTimer = null
+  #currentEra = null
+  #lastHomesJSON = null
 
   connectedCallback() {
     super.connectedCallback()
@@ -83,6 +88,8 @@ customElements.define('map-view', class extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback()
     if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame)
+    if (this.#eraFadeTimer) clearTimeout(this.#eraFadeTimer)
+    if (this.#eraSettleTimer) clearTimeout(this.#eraSettleTimer)
     this.#resizeObserver?.disconnect()
     window.visualViewport?.removeEventListener('resize', this.#handleViewportResize)
     window.removeEventListener('orientationchange', this.#handleViewportResize)
@@ -138,8 +145,41 @@ customElements.define('map-view', class extends LitElement {
     })
   }
 
+  #buildDominantEraColorExpression() {
+    // Build a nested case expression that checks each era's count
+    // and returns the color of the era with the highest count
+    const expression = ['case']
+    
+    // For each era (in reverse order so earlier eras take precedence in ties)
+    for (let i = ERAS.length - 1; i >= 0; i--) {
+      const era = ERAS[i]
+      const countKey = `${era.id}_count`
+      
+      // Check if this era has the most homes in the cluster
+      const isMaxCondition = ['all']
+      for (let j = 0; j < ERAS.length; j++) {
+        if (i === j) continue
+        const otherEra = ERAS[j]
+        isMaxCondition.push(['>=', ['get', countKey], ['get', `${otherEra.id}_count`]])
+      }
+      
+      expression.push(isMaxCondition, era.color)
+    }
+    
+    // Fallback color
+    expression.push(this.theme?.ink || '#1B2238')
+    
+    return expression
+  }
+
   #installMapLayers() {
     if (!this.#map) return
+
+    // Build cluster properties for each era to track dominant color
+    const clusterProperties = {}
+    ERAS.forEach(era => {
+      clusterProperties[`${era.id}_count`] = ['+', ['case', ['==', ['get', 'era'], era.id], 1, 0]]
+    })
 
     this.#map.addSource('homes', {
       type: 'geojson',
@@ -148,6 +188,7 @@ customElements.define('map-view', class extends LitElement {
       clusterMinPoints: CLUSTER_MIN_POINTS,
       clusterMaxZoom: CLUSTER_MAX_ZOOM,
       clusterRadius: CLUSTER_RADIUS,
+      clusterProperties,
     })
 
     this.#map.addLayer({
@@ -169,18 +210,18 @@ customElements.define('map-view', class extends LitElement {
       source: 'homes',
       filter: ['has', 'point_count'],
       paint: {
-        'circle-color': this.theme?.ink || '#1B2238',
-        'circle-opacity': 0.16,
-        'circle-stroke-width': 2,
+        'circle-color': this.#buildDominantEraColorExpression(),
+        'circle-opacity': 0.2,
+        'circle-stroke-width': 3,
         'circle-stroke-color': this.theme?.bg || '#FEF6E4',
         'circle-radius': [
           'step',
           ['get', 'point_count'],
-          22,
-          20, 28,
-          40, 36,
-          80, 46,
-          160, 56,
+          28,
+          100, 36,
+          200, 46,
+          400, 56,
+          800, 66,
         ],
       },
     })
@@ -221,8 +262,66 @@ customElements.define('map-view', class extends LitElement {
         'circle-stroke-width': 3,
         'circle-stroke-color': this.theme?.bg || '#FEF6E4',
         'circle-opacity': 0.9,
+        'circle-opacity-transition': { duration: 500 },
       },
     })
+  }
+
+  #updateEraOpacity(eraId, instant = false) {
+    if (!this.#map || !this.#mapReady) return
+    const layer = this.#map.getLayer('homes-circles')
+    const glowLayer = this.#map.getLayer('homes-glow')
+    if (!layer) return
+
+    const duration = instant ? 0 : 500
+    this.#map.setPaintProperty('homes-circles', 'circle-opacity-transition', { duration })
+    if (glowLayer) {
+      this.#map.setPaintProperty('homes-glow', 'circle-opacity-transition', { duration })
+    }
+
+    if (!eraId) {
+      // Restore full opacity
+      this.#map.setPaintProperty('homes-circles', 'circle-opacity', 0.9)
+      if (glowLayer) {
+        this.#map.setPaintProperty('homes-glow', 'circle-opacity', 0.25)
+      }
+    } else {
+      // Find the era and get its index
+      const currentEraIndex = ERAS.findIndex(e => e.id === eraId)
+      if (currentEraIndex === -1) return
+      
+      // Fade pins from previous eras, keep current era at full opacity
+      const previousEraIds = ERAS.slice(0, currentEraIndex).map(e => e.id)
+      
+      if (previousEraIds.length === 0) {
+        // First era, everything at full opacity
+        this.#map.setPaintProperty('homes-circles', 'circle-opacity', 0.9)
+        if (glowLayer) {
+          this.#map.setPaintProperty('homes-glow', 'circle-opacity', 0.25)
+        }
+      } else {
+        // Build match expression for previous eras
+        const matchExpression = [
+          'match',
+          ['get', 'era'],
+          previousEraIds,
+          0.25, // opacity for previous eras
+          0.9   // opacity for current era
+        ]
+        
+        this.#map.setPaintProperty('homes-circles', 'circle-opacity', matchExpression)
+        if (glowLayer) {
+          const glowMatchExpression = [
+            'match',
+            ['get', 'era'],
+            previousEraIds,
+            0.08,
+            0.25
+          ]
+          this.#map.setPaintProperty('homes-glow', 'circle-opacity', glowMatchExpression)
+        }
+      }
+    }
   }
 
   #bindMapEvents() {
@@ -320,13 +419,44 @@ customElements.define('map-view', class extends LitElement {
   updated(changed) {
     if (!this.#map || !this.#mapReady) return
 
-    // Update GeoJSON data when homes or newThisYear change
-    if (changed.has('homes') || changed.has('newThisYear') || changed.has('year')) {
-      const src = this.#map.getSource('homes')
-      if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
+    // Update GeoJSON data ONLY when homes or newThisYear actually change
+    // (not on every year change, to prevent pin dancing)
+    if (changed.has('homes') || changed.has('newThisYear')) {
+      const newJSON = JSON.stringify({ homes: this.homes, newThisYear: Array.from(this.newThisYear || []) })
+      if (newJSON !== this.#lastHomesJSON) {
+        this.#lastHomesJSON = newJSON
+        const src = this.#map.getSource('homes')
+        if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
+        requestAnimationFrame(() => this.#emitViewportCount())
+      }
+    }
 
-      // Update viewport count after data change
-      requestAnimationFrame(() => this.#emitViewportCount())
+    // Handle era transitions with opacity fading - only after movement settles
+    if (changed.has('year') && this.year) {
+      const newEra = eraFor(this.year)
+      
+      // Clear any pending fade restore timer
+      if (this.#eraFadeTimer) {
+        clearTimeout(this.#eraFadeTimer)
+        this.#eraFadeTimer = null
+      }
+      
+      // If era changed or we're starting, apply the fade immediately
+      if (newEra.id !== this.#currentEra) {
+        this.#currentEra = newEra.id
+        this.#updateEraOpacity(newEra.id, true)
+      }
+      
+      // Clear any existing settle timer
+      if (this.#eraSettleTimer) {
+        clearTimeout(this.#eraSettleTimer)
+      }
+      
+      // Wait for movement to stop before restoring full opacity
+      this.#eraSettleTimer = setTimeout(() => {
+        this.#eraSettleTimer = null
+        this.#updateEraOpacity(null)
+      }, 1200)
     }
 
     // Update stroke color + map style when theme changes
@@ -339,7 +469,7 @@ customElements.define('map-view', class extends LitElement {
         this.#map.setPaintProperty('homes-circles', 'circle-stroke-color', this.theme.bg)
       }
       if (this.#map.getLayer('homes-clusters')) {
-        this.#map.setPaintProperty('homes-clusters', 'circle-color', this.theme.ink)
+        this.#map.setPaintProperty('homes-clusters', 'circle-color', this.#buildDominantEraColorExpression())
         this.#map.setPaintProperty('homes-clusters', 'circle-stroke-color', this.theme.bg)
       }
       if (this.#map.getLayer('homes-cluster-count')) {
