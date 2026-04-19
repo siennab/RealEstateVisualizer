@@ -8,9 +8,15 @@ export async function getUserLocation() {
 
   try {
     // Use ipapi.co free service (no key required for basic usage)
+    // Add timeout using AbortController
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000)
+    
     const response = await fetch('https://ipapi.co/json/', {
-      timeout: 3000,
+      signal: controller.signal,
     })
+    
+    clearTimeout(timeoutId)
     
     if (!response.ok) throw new Error('Geolocation API failed')
     
@@ -21,6 +27,7 @@ export async function getUserLocation() {
       return cachedLocation
     }
   } catch (error) {
+    // Silently fall back to default - don't block map initialization
     console.warn('Could not determine location, using default:', error)
   }
 

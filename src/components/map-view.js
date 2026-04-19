@@ -106,7 +106,7 @@ customElements.define('map-view', class extends LitElement {
     }
   }
 
-  async #initMap() {
+  #initMap() {
     const container = this.querySelector('.mapbox-container')
     if (!container || this.#map) return
 
@@ -114,9 +114,6 @@ customElements.define('map-view', class extends LitElement {
     this.#resizeObserver.observe(container)
     window.visualViewport?.addEventListener('resize', this.#handleViewportResize)
     window.addEventListener('orientationchange', this.#handleViewportResize)
-
-    // Get user's approximate location
-    const center = await getUserLocation()
 
     mapboxgl.accessToken = MAPBOX_TOKEN
     const styleName = this.theme?.name || ''
@@ -127,10 +124,21 @@ customElements.define('map-view', class extends LitElement {
     const resolvedTheme = this.#resolveThemeKey()
     this.#currentStyle = STYLE_FOR_THEME[resolvedTheme]
 
+    // Get user's approximate location (async, non-blocking)
+    let initialCenter = [-87.9065, 43.0389] // Milwaukee default
+    getUserLocation().then(center => {
+      // If map is already initialized and location is different, fly to it
+      if (this.#map && center[0] !== initialCenter[0]) {
+        this.#map.flyTo({ center, zoom: DEFAULT_ZOOM, duration: 2000 })
+      }
+    }).catch(() => {
+      // Ignore errors, just use default
+    })
+
     this.#map = new mapboxgl.Map({
       container,
       style: this.#currentStyle,
-      center,
+      center: initialCenter,
       zoom: DEFAULT_ZOOM,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
