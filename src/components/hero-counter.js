@@ -34,6 +34,28 @@ customElements.define('hero-counter', class extends LitElement {
       letter-spacing: -0.02em;
       margin-top: 2px;
       font-feature-settings: "ss01";
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .year-input {
+      font-family: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+      font-size: 72px;
+      line-height: 0.92;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      margin-top: 2px;
+      font-feature-settings: "ss01";
+      border: none;
+      background: transparent;
+      width: 180px;
+      padding: 0;
+      outline: 2px solid currentColor;
+      border-radius: 4px;
+      padding: 0 8px;
+      user-select: text;
+      -webkit-user-select: text;
     }
     .right {
       text-align: right;
@@ -60,6 +82,52 @@ customElements.define('hero-counter', class extends LitElement {
     theme: { type: Object },
   }
 
+  #editMode = false
+  #lastTap = 0
+
+  #handleYearTap(e) {
+    const now = Date.now()
+    const timeSinceLastTap = now - this.#lastTap
+    
+    if (timeSinceLastTap < 300) {
+      // Double tap detected
+      e.preventDefault()
+      this.#editMode = true
+      this.requestUpdate()
+      this.updateComplete.then(() => {
+        const input = this.shadowRoot.querySelector('.year-input')
+        if (input) {
+          input.focus()
+          input.select()
+        }
+      })
+    }
+    this.#lastTap = now
+  }
+
+  #handleYearInput(e) {
+    if (e.key === 'Enter') {
+      const value = parseInt(e.target.value, 10)
+      if (value >= 1800 && value <= 2026) {
+        this.dispatchEvent(new CustomEvent('year-changed', {
+          detail: { year: value },
+          bubbles: true,
+          composed: true,
+        }))
+      }
+      this.#editMode = false
+      this.requestUpdate()
+    } else if (e.key === 'Escape') {
+      this.#editMode = false
+      this.requestUpdate()
+    }
+  }
+
+  #handleYearBlur() {
+    this.#editMode = false
+    this.requestUpdate()
+  }
+
   render() {
     const t = this.theme || {}
     const era = eraFor(this.year || 1800)
@@ -71,9 +139,27 @@ customElements.define('hero-counter', class extends LitElement {
             <span class="era-dot" style="background:${era.color}"></span>
             ${era.label}
           </div>
-          <div class="year-display" style="color:${t.ink}">
-            ${this.year || 1800}
-          </div>
+          ${this.#editMode ? html`
+            <input
+              type="number"
+              class="year-input"
+              style="color:${t.ink}"
+              .value="${this.year || 1800}"
+              min="1800"
+              max="2026"
+              @keydown=${this.#handleYearInput}
+              @blur=${this.#handleYearBlur}
+            />
+          ` : html`
+            <div
+              class="year-display"
+              style="color:${t.ink}"
+              @click=${this.#handleYearTap}
+              @touchstart=${this.#handleYearTap}
+            >
+              ${this.year || 1800}
+            </div>
+          `}
         </div>
         <div class="right">
           <div class="count-num" style="color:${t.ink}">

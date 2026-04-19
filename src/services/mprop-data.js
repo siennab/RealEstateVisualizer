@@ -31,6 +31,8 @@ async function load() {
         sqft: null,
       })
     }
+    // Sort by year ascending so newer homes render on top in map layers
+    records.sort((a, b) => a.year - b.year)
     return records
   })()
   return loading

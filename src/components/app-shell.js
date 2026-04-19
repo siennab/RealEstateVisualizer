@@ -178,6 +178,7 @@ customElements.define('app-shell', class extends LitElement {
             .year=${s.year}
             .count=${this.#viewportCount}
             .theme=${t}
+            @year-changed=${this.#onYearChanged.bind(this)}
           ></hero-counter>
 
           <div style="margin-top:2px;">

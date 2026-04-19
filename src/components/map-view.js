@@ -1,10 +1,10 @@
 import { LitElement, html } from 'lit'
 import mapboxgl from 'mapbox-gl'
 import { ERAS, eraFor } from '../store.js'
+import { getUserLocation } from '../services/location-service.js'
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
-const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
-const ZOOM = 17
+const DEFAULT_ZOOM = 13
 const MIN_ZOOM = 5
 const MAX_ZOOM = 19
 const CLUSTER_MIN_POINTS = 80
@@ -19,7 +19,7 @@ const STYLE_FOR_THEME = {
   midnight: 'mapbox://styles/mapbox/dark-v11',
 }
 
-function homeToFeature(h, newThisYear) {
+function homeToFeature(h, newThisYear, index) {
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [h.lng, h.lat] },
@@ -35,14 +35,16 @@ function homeToFeature(h, newThisYear) {
       lat: h.lat,
       color: (ERAS.find(e => e.id === h.era) || {}).color || '#F582AE',
       isNew: newThisYear instanceof Set ? newThisYear.has(h.id) : false,
+      index: index,
     },
   }
 }
 
 function homesToGeoJSON(homes, newThisYear) {
+  // Data is already sorted by year in mprop-data service
   return {
     type: 'FeatureCollection',
-    features: (homes || []).map(h => homeToFeature(h, newThisYear)),
+    features: (homes || []).map((h, index) => homeToFeature(h, newThisYear, index)),
   }
 }
 
@@ -104,7 +106,7 @@ customElements.define('map-view', class extends LitElement {
     }
   }
 
-  #initMap() {
+  async #initMap() {
     const container = this.querySelector('.mapbox-container')
     if (!container || this.#map) return
 
@@ -112,6 +114,9 @@ customElements.define('map-view', class extends LitElement {
     this.#resizeObserver.observe(container)
     window.visualViewport?.addEventListener('resize', this.#handleViewportResize)
     window.addEventListener('orientationchange', this.#handleViewportResize)
+
+    // Get user's approximate location
+    const center = await getUserLocation()
 
     mapboxgl.accessToken = MAPBOX_TOKEN
     const styleName = this.theme?.name || ''
@@ -125,8 +130,8 @@ customElements.define('map-view', class extends LitElement {
     this.#map = new mapboxgl.Map({
       container,
       style: this.#currentStyle,
-      center: CENTER,
-      zoom: ZOOM,
+      center,
+      zoom: DEFAULT_ZOOM,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
       attributionControl: false,
@@ -146,6 +151,13 @@ customElements.define('map-view', class extends LitElement {
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
       })
+
+      // Optimize: only use sort key when zoomed in enough
+      // When zoomed out, there are too many pins for sorting to be performant
+      this.#map.on('zoom', () => {
+        this.#updateSortKeyForZoom()
+      })
+      this.#updateSortKeyForZoom() // Set initial state
     })
   }
 
@@ -257,11 +269,7 @@ customElements.define('map-view', class extends LitElement {
       source: 'homes',
       filter: ['!', ['has', 'point_count']],
       paint: {
-        'circle-radius': [
-          'case',
-          ['==', ['get', 'isNew'], true], 12,
-          9,
-        ],
+        'circle-radius': 9,
         'circle-color': ['get', 'color'],
         'circle-stroke-width': 3,
         'circle-stroke-color': this.theme?.bg || '#FEF6E4',
@@ -269,6 +277,22 @@ customElements.define('map-view', class extends LitElement {
         'circle-opacity-transition': { duration: 500 },
       },
     })
+  }
+
+  #updateSortKeyForZoom() {
+    if (!this.#map || !this.#mapReady) return
+    const zoom = this.#map.getZoom()
+    const ZOOM_THRESHOLD = 14 // Only sort when zoomed in past this level
+    
+    // Enable sorting when zoomed in, disable when zoomed out for performance
+    const sortKey = zoom >= ZOOM_THRESHOLD ? ['get', 'index'] : undefined
+    
+    if (this.#map.getLayer('homes-circles')) {
+      this.#map.setLayoutProperty('homes-circles', 'circle-sort-key', sortKey)
+    }
+    if (this.#map.getLayer('homes-glow')) {
+      this.#map.setLayoutProperty('homes-glow', 'circle-sort-key', sortKey)
+    }
   }
 
   #updateEraOpacity(eraId, instant = false) {
@@ -424,7 +448,7 @@ customElements.define('map-view', class extends LitElement {
     if (!this.#map || !this.#mapReady) return
 
     // Update GeoJSON data ONLY when homes or newThisYear actually change
-    // (not on every year change, to prevent pin dancing)
+    // Pre-sorted data ensures correct z-ordering without expensive circle-sort-key
     if (changed.has('homes') || changed.has('newThisYear')) {
       const newJSON = JSON.stringify({ homes: this.homes, newThisYear: Array.from(this.newThisYear || []) })
       if (newJSON !== this.#lastHomesJSON) {
