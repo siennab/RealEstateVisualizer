@@ -96,6 +96,19 @@ export const StreetViewService = {
    */
   async isAvailable(lat, lng) {
     if (!this.isConfigured()) {
+      return false
+    }
+
+    try {
+      const url = this.getMetadataUrl(lat, lng)
+      const response = await fetch(url)
+      const data = await response.json()
+      return data.status === 'OK'
+    } catch (error) {
+      console.warn('[StreetViewService] Failed to check availability:', error)
+      return false
+    }
+  },
 
   /**
    * Get cache statistics for monitoring usage
@@ -114,18 +127,5 @@ export const StreetViewService = {
    */
   clearCache() {
     urlCache.clear()
-  },
-      return false
-    }
-
-    try {
-      const url = this.getMetadataUrl(lat, lng)
-      const response = await fetch(url)
-      const data = await response.json()
-      return data.status === 'OK'
-    } catch (error) {
-      console.warn('[StreetViewService] Failed to check availability:', error)
-      return false
-    }
   },
 }
