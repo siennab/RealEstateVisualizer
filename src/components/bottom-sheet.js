@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit'
 import { ERAS } from '../store.js'
+import { StreetViewService } from '../services/street-view-service.js'
 
 function houseIllustration(eraId, color, theme) {
   const roofs = {
@@ -79,6 +80,13 @@ customElements.define('bottom-sheet', class extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+    .photo-area img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
     }
     .year-badge {
       position: absolute;
@@ -161,6 +169,39 @@ customElements.define('bottom-sheet', class extends LitElement {
     theme:    { type: Object },
   }
 
+  #streetViewUrl = null
+  #useStreetView = false
+  #imageLoaded = false
+
+  updated(changed) {
+    if (changed.has('property')) {
+      // Reset image state when property changes
+      this.#streetViewUrl = null
+      this.#useStreetView = false
+      this.#imageLoaded = false
+    }
+  }
+
+  #getStreetViewUrl() {
+    // Lazy load: only generate URL when actually needed for rendering
+    if (!this.#imageLoaded && this.property && StreetViewService.isConfigured() && 
+        this.property.lat && this.property.lng) {
+      this.#streetViewUrl = StreetViewService.getImageUrl(
+        this.property.lat,
+        this.property.lng,
+        { 
+          width: 800,    // Higher resolution for better quality
+          height: 400,   // 2:1 aspect ratio
+          fov: 80,       // Slightly narrower field of view to focus on building
+          pitch: 10      // Slight upward tilt to center buildings better
+        }
+      )
+      this.#useStreetView = true
+      this.#imageLoaded = true
+    }
+    return this.#streetViewUrl
+  }
+
   #onClose() {
     this.dispatchEvent(new CustomEvent('sheet-closed', { bubbles: true, composed: true }))
   }
@@ -170,6 +211,9 @@ customElements.define('bottom-sheet', class extends LitElement {
     const home = this.property
     const open = !!home
     const era = home ? ERAS.find(e => e.id === home.era) : null
+    
+    // Only generate Street View URL when sheet is actually open
+    const streetViewUrl = open ? this.#getStreetViewUrl() : null
 
     return html`
       <!-- backdrop -->
@@ -200,13 +244,25 @@ customElements.define('bottom-sheet', class extends LitElement {
               border: 1px solid ${era.color}33;
             "
           >
-            ${houseIllustration(home.era, era.color, t)}
+            ${this.#useStreetView && streetViewUrl ? html`
+              <img
+                src="${streetViewUrl}"
+                alt="Street view of ${home.address}"
+                loading="lazy"
+                @error=${() => {
+                  this.#useStreetView = false
+                  this.requestUpdate()
+                }}
+              />
+            ` : houseIllustration(home.era, era.color, t)}
             <div class="year-badge" style="background:${t.sheet};color:${t.ink}">
               ◷ c. ${home.year}
             </div>
-            <div class="photo-label" style="color:${t.inkSoft}">
-              photo pending
-            </div>
+            ${!this.#useStreetView ? html`
+              <div class="photo-label" style="color:${t.inkSoft}">
+                photo pending
+              </div>
+            ` : ''}
           </div>
 
           <!-- content -->

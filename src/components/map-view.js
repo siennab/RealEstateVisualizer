@@ -31,6 +31,8 @@ function homeToFeature(h, newThisYear) {
       address: h.address,
       beds: h.beds,
       sqft: h.sqft,
+      lng: h.lng,
+      lat: h.lat,
       color: (ERAS.find(e => e.id === h.era) || {}).color || '#F582AE',
       isNew: newThisYear instanceof Set ? newThisYear.has(h.id) : false,
     },
@@ -54,6 +56,8 @@ function featureToHome(props) {
     address: props.address,
     beds: props.beds,
     sqft: props.sqft,
+    lng: props.lng,
+    lat: props.lat,
   }
 }
 
