@@ -134,6 +134,8 @@ customElements.define('app-shell', class extends LitElement {
     const homes = this.#visibleHomes
     const newSet = this.#newThisYearSet
 
+    const desktop = this.#isDesktop
+
     return html`
       <div style="
         position:relative;
@@ -144,11 +146,12 @@ customElements.define('app-shell', class extends LitElement {
         font-family:'Geist',-apple-system,system-ui,sans-serif;
         color:${t.ink};
         overflow:hidden;
-        display:flex;
-        flex-direction:column;
+        ${desktop ? '' : 'display:flex;flex-direction:column;'}
       ">
         <!-- MAP -->
-        <div style="flex:1;position:relative;overflow:hidden;min-height:0;">
+        <div style="${desktop
+          ? 'position:absolute;inset:0;'
+          : 'flex:1;position:relative;overflow:hidden;min-height:0;'}">
           <map-view
             .homes=${homes}
             .newThisYear=${newSet}
@@ -163,9 +166,19 @@ customElements.define('app-shell', class extends LitElement {
 
         <!-- PANEL -->
         <div style="
-          flex:0 0 auto;
-          max-height:${this.#isDesktop ? '280px' : '44%'};
-          min-height:${this.#isDesktop ? '200px' : '244px'};
+          ${desktop ? `
+            position:absolute;
+            bottom:0;
+            left:0;
+            max-width:400px;
+            width:100%;
+            z-index:400;
+            border-radius:12px 12px 0 0;
+          ` : `
+            flex:0 0 auto;
+            max-height:44%;
+            min-height:244px;
+          `}
           background:${t.bg};
           border-top:1px solid ${t.ink}12;
           box-shadow:0 -4px 20px rgba(0,0,0,0.04);
@@ -214,7 +227,7 @@ customElements.define('app-shell', class extends LitElement {
           .property=${s.selectedProperty}
           .theme=${t}
           @sheet-closed=${this.#onSheetClosed.bind(this)}
-          style="position:absolute;inset:0;pointer-events:none;"
+          style="position:absolute;${desktop ? 'left:0;top:0;bottom:0;width:400px;z-index:500;' : 'inset:0;'}pointer-events:none;"
         ></bottom-sheet>
       </div>
     `

@@ -216,13 +216,6 @@ customElements.define('bottom-sheet', class extends LitElement {
     const streetViewUrl = open ? this.#getStreetViewUrl() : null
 
     return html`
-      <!-- backdrop -->
-      <div
-        class="backdrop"
-        style="opacity:${open ? 1 : 0}; pointer-events:${open ? 'auto' : 'none'}"
-        @click=${this.#onClose}
-      ></div>
-
       <!-- sheet -->
       <div
         class="sheet"
