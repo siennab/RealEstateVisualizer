@@ -79,6 +79,7 @@ customElements.define('hero-counter', class extends LitElement {
   static properties = {
     year:  { type: Number },
     count: { type: Number },
+    hasClusters: { type: Boolean },
     theme: { type: Object },
   }
 
@@ -161,14 +162,16 @@ customElements.define('hero-counter', class extends LitElement {
             </div>
           `}
         </div>
-        <div class="right">
-          <div class="count-num" style="color:${t.ink}">
-            ${(this.count || 0).toLocaleString()}
+        ${!this.hasClusters ? html`
+          <div class="right">
+            <div class="count-num" style="color:${t.ink}">
+              ${(this.count || 0).toLocaleString()}
+            </div>
+            <div class="count-label" style="color:${t.inkSoft}">
+              homes built
+            </div>
           </div>
-          <div class="count-label" style="color:${t.inkSoft}">
-            homes built
-          </div>
-        </div>
+        ` : ''}
       </div>
     `
   }

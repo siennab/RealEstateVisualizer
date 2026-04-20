@@ -29,6 +29,7 @@ customElements.define('app-shell', class extends LitElement {
   #unsubscribe = null
   #state = store.state
   #viewportCount = 0
+  #hasClusters = false
 
   connectedCallback() {
     super.connectedCallback()
@@ -87,6 +88,7 @@ customElements.define('app-shell', class extends LitElement {
 
   #onViewportCount(e) {
     this.#viewportCount = e.detail.count
+    this.#hasClusters = e.detail.hasClusters
     this.requestUpdate()
   }
 
@@ -190,6 +192,7 @@ customElements.define('app-shell', class extends LitElement {
           <hero-counter
             .year=${s.year}
             .count=${this.#viewportCount}
+            .hasClusters=${this.#hasClusters}
             .theme=${t}
             @year-changed=${this.#onYearChanged.bind(this)}
           ></hero-counter>

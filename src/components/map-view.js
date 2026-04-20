@@ -293,17 +293,15 @@ customElements.define('map-view', class extends LitElement {
       const individualHomes = this.#map.queryRenderedFeatures({ layers: ['homes-circles'] })
       const uniqueIndividual = new Set(individualHomes.map(f => f.properties.id))
       
-      // Count homes in clusters
+      // Check if clusters are visible
       const clusters = this.#map.queryRenderedFeatures({ layers: ['clusters'] })
-      const clusterCount = clusters.reduce((sum, cluster) => {
-        return sum + (cluster.properties.point_count || 0)
-      }, 0)
-      
-      // Total is individual homes plus all homes in clusters
-      const totalCount = uniqueIndividual.size + clusterCount
+      const hasClusters = clusters.length > 0
       
       this.dispatchEvent(new CustomEvent('viewport-count', {
-        detail: { count: totalCount },
+        detail: { 
+          count: uniqueIndividual.size,
+          hasClusters: hasClusters
+        },
         bubbles: true,
         composed: true,
       }))

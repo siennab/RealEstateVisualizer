@@ -2,6 +2,15 @@ import { LitElement, html, css } from 'lit'
 import { ERAS } from '../store.js'
 import { StreetViewService } from '../services/street-view-service.js'
 
+// Generate property search URL from address
+function getListingUrl(address) {
+  if (!address) return null
+  // Google search is most reliable for finding specific property listings
+  // Will show Zillow, Redfin, and other listing sites
+  const searchQuery = encodeURIComponent(`${address} Milwaukee WI zillow`)
+  return `https://www.google.com/search?q=${searchQuery}`
+}
+
 function houseIllustration(eraId, color, theme) {
   const roofs = {
     early:      'M40 60 L100 30 L160 60 Z',
@@ -48,6 +57,7 @@ customElements.define('bottom-sheet', class extends LitElement {
       background: rgba(0,0,0,0.2);
       transition: opacity 240ms;
       z-index: 40;
+      pointer-events: auto;
     }
     .sheet {
       position: absolute;
@@ -60,6 +70,7 @@ customElements.define('bottom-sheet', class extends LitElement {
       z-index: 50;
       overflow: hidden;
       padding-bottom: 28px;
+      pointer-events: auto;
     }
     .handle-row {
       display: flex;
@@ -143,12 +154,20 @@ customElements.define('bottom-sheet', class extends LitElement {
     }
     .stats {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
     }
     .stat {
       border-radius: 14px;
       padding: 10px 12px;
+      transition: transform 120ms, opacity 120ms;
+    }
+    .stat[style*="cursor:pointer"]:hover {
+      transform: scale(1.05);
+      opacity: 0.8;
+    }
+    .stat[style*="cursor:pointer"]:active {
+      transform: scale(0.98);
     }
     .stat-label {
       font-size: 10px;
@@ -274,13 +293,9 @@ customElements.define('bottom-sheet', class extends LitElement {
                 <div class="stat-label" style="color:${t.inkSoft}">Year</div>
                 <div class="stat-value" style="color:${t.ink}">${home.year}</div>
               </div>
-              <div class="stat" style="background:${t.bg}">
-                <div class="stat-label" style="color:${t.inkSoft}">Beds</div>
-                <div class="stat-value" style="color:${t.ink}">${home.beds ?? '—'}</div>
-              </div>
-              <div class="stat" style="background:${t.bg}">
-                <div class="stat-label" style="color:${t.inkSoft}">Sq Ft</div>
-                <div class="stat-value" style="color:${t.ink}">${home.sqft != null ? home.sqft.toLocaleString() : '—'}</div>
+              <div class="stat" style="background:${t.bg};cursor:pointer" @click=${() => window.open(getListingUrl(home.address), '_blank')}>
+                <div class="stat-label" style="color:${t.inkSoft}">Listing</div>
+                <div class="stat-value" style="color:${era.color};font-size:12px;font-weight:700;letter-spacing:0.05em">SEARCH ↗</div>
               </div>
             </div>
           </div>
