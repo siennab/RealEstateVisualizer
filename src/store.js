@@ -5,7 +5,7 @@ export { ERAS, eraFor }
 
 class AppStore {
   #state = {
-    year: 1820,
+    year: 1850,
     playing: false,
     theme: 'cream',
     isolatedEraId: null,

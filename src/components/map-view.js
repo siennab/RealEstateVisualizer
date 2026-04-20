@@ -1,16 +1,12 @@
 import { LitElement, html } from 'lit'
 import mapboxgl from 'mapbox-gl'
-import { ERAS, eraFor } from '../store.js'
-import { getUserLocation } from '../services/location-service.js'
+import { ERAS } from '../store.js'
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
-const DEFAULT_ZOOM = 13
-const MIN_ZOOM = 5
+const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
+const ZOOM = 14
+const MIN_ZOOM = 11
 const MAX_ZOOM = 19
-const CLUSTER_MIN_POINTS = 80
-const CLUSTER_MAX_ZOOM = 10
-const CLUSTER_RADIUS = 80
-const ERA_FADE_DELAY = 800
 
 // Map Mapbox base styles to themes
 const STYLE_FOR_THEME = {
@@ -19,7 +15,7 @@ const STYLE_FOR_THEME = {
   midnight: 'mapbox://styles/mapbox/dark-v11',
 }
 
-function homeToFeature(h, newThisYear, index) {
+function homeToFeature(h, newThisYear) {
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [h.lng, h.lat] },
@@ -31,20 +27,16 @@ function homeToFeature(h, newThisYear, index) {
       address: h.address,
       beds: h.beds,
       sqft: h.sqft,
-      lng: h.lng,
-      lat: h.lat,
       color: (ERAS.find(e => e.id === h.era) || {}).color || '#F582AE',
       isNew: newThisYear instanceof Set ? newThisYear.has(h.id) : false,
-      index: index,
     },
   }
 }
 
 function homesToGeoJSON(homes, newThisYear) {
-  // Data is already sorted by year in mprop-data service
   return {
     type: 'FeatureCollection',
-    features: (homes || []).map((h, index) => homeToFeature(h, newThisYear, index)),
+    features: (homes || []).map(h => homeToFeature(h, newThisYear)),
   }
 }
 
@@ -58,8 +50,6 @@ function featureToHome(props) {
     address: props.address,
     beds: props.beds,
     sqft: props.sqft,
-    lng: props.lng,
-    lat: props.lat,
   }
 }
 
@@ -77,13 +67,6 @@ customElements.define('map-view', class extends LitElement {
   #mapReady = false
   #currentStyle = null
   #viewportCountTimer = null
-  #resizeFrame = 0
-  #resizeObserver = null
-  #handleViewportResize = () => this.#scheduleResize()
-  #eraFadeTimer = null
-  #eraSettleTimer = null
-  #currentEra = null
-  #lastHomesJSON = null
 
   connectedCallback() {
     super.connectedCallback()
@@ -93,12 +76,6 @@ customElements.define('map-view', class extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
-    if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame)
-    if (this.#eraFadeTimer) clearTimeout(this.#eraFadeTimer)
-    if (this.#eraSettleTimer) clearTimeout(this.#eraSettleTimer)
-    this.#resizeObserver?.disconnect()
-    window.visualViewport?.removeEventListener('resize', this.#handleViewportResize)
-    window.removeEventListener('orientationchange', this.#handleViewportResize)
     if (this.#map) {
       this.#map.remove()
       this.#map = null
@@ -110,11 +87,6 @@ customElements.define('map-view', class extends LitElement {
     const container = this.querySelector('.mapbox-container')
     if (!container || this.#map) return
 
-    this.#resizeObserver = new ResizeObserver(() => this.#scheduleResize())
-    this.#resizeObserver.observe(container)
-    window.visualViewport?.addEventListener('resize', this.#handleViewportResize)
-    window.addEventListener('orientationchange', this.#handleViewportResize)
-
     mapboxgl.accessToken = MAPBOX_TOKEN
     const styleName = this.theme?.name || ''
     const themeKey = Object.keys(STYLE_FOR_THEME).find(
@@ -124,22 +96,11 @@ customElements.define('map-view', class extends LitElement {
     const resolvedTheme = this.#resolveThemeKey()
     this.#currentStyle = STYLE_FOR_THEME[resolvedTheme]
 
-    // Get user's approximate location (async, non-blocking)
-    let initialCenter = [-87.9065, 43.0389] // Milwaukee default
-    getUserLocation().then(center => {
-      // If map is already initialized and location is different, fly to it
-      if (this.#map && center[0] !== initialCenter[0]) {
-        this.#map.flyTo({ center, zoom: DEFAULT_ZOOM, duration: 2000 })
-      }
-    }).catch(() => {
-      // Ignore errors, just use default
-    })
-
     this.#map = new mapboxgl.Map({
       container,
       style: this.#currentStyle,
-      center: initialCenter,
-      zoom: DEFAULT_ZOOM,
+      center: CENTER,
+      zoom: ZOOM,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
       attributionControl: false,
@@ -150,270 +111,171 @@ customElements.define('map-view', class extends LitElement {
 
     this.#map.on('load', () => {
       this.#mapReady = true
-      this.#scheduleResize()
 
-      this.#installMapLayers()
-      this.#bindMapEvents()
+      // GeoJSON source for all homes
+      // Enable clustering on desktop for better performance, lighter on mobile
+      const isDesktop = window.innerWidth >= 768
+      const sourceConfig = {
+        type: 'geojson',
+        data: homesToGeoJSON(this.homes, this.newThisYear),
+        cluster: true,
+        clusterMaxZoom: isDesktop ? 14 : 12,  // Cluster less aggressively on mobile
+        clusterRadius: isDesktop ? 80 : 60,
+        clusterProperties: {
+          // Count homes per era in each cluster
+          early: ['+', ['case', ['==', ['get', 'era'], 'early'], 1, 0]],
+          gilded: ['+', ['case', ['==', ['get', 'era'], 'gilded'], 1, 0]],
+          victorian: ['+', ['case', ['==', ['get', 'era'], 'victorian'], 1, 0]],
+          craftsman: ['+', ['case', ['==', ['get', 'era'], 'craftsman'], 1, 0]],
+          depression: ['+', ['case', ['==', ['get', 'era'], 'depression'], 1, 0]],
+          midcentury: ['+', ['case', ['==', ['get', 'era'], 'midcentury'], 1, 0]],
+          modernist: ['+', ['case', ['==', ['get', 'era'], 'modernist'], 1, 0]],
+          revival: ['+', ['case', ['==', ['get', 'era'], 'revival'], 1, 0]],
+          contemp: ['+', ['case', ['==', ['get', 'era'], 'contemp'], 1, 0]],
+        },
+      }
+      
+      this.#map.addSource('homes', sourceConfig)
+
+      // Cluster circles layer (both desktop and mobile)
+      this.#map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'homes',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': [
+            'case',
+            // Check which era has the most homes in this cluster
+            ['>=', ['get', 'early'], ['max', ['get', 'gilded'], ['get', 'victorian'], ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#C9A66B',
+            ['>=', ['get', 'gilded'], ['max', ['get', 'victorian'], ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#B8860B',
+            ['>=', ['get', 'victorian'], ['max', ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#8E4A7F',
+            ['>=', ['get', 'craftsman'], ['max', ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#A65A3A',
+            ['>=', ['get', 'depression'], ['max', ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#5A6B7A',
+            ['>=', ['get', 'midcentury'], ['max', ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#E8A87C',
+            ['>=', ['get', 'modernist'], ['max', ['get', 'revival'], ['get', 'contemp']]], '#6B8E7F',
+            ['>=', ['get', 'revival'], ['get', 'contemp']], '#C97B63',
+            '#F582AE' // contemp or fallback
+          ],
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            20,
+            10,
+            25,
+            25,
+            30,
+            50,
+            35,
+          ],
+          'circle-stroke-width': 3,
+          'circle-stroke-color': this.theme?.bg || '#FEF6E4',
+          'circle-opacity': 0.85,
+        },
+      })
+
+      this.#map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'homes',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          'text-size': 13,
+        },
+        paint: {
+          'text-color': this.theme?.bg || '#FEF6E4',
+        },
+      })
+
+      // Glow layer for newly-built homes
+      this.#map.addLayer({
+        id: 'homes-glow',
+        type: 'circle',
+        source: 'homes',
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
+        paint: {
+          'circle-radius': 24,
+          'circle-color': ['get', 'color'],
+          'circle-opacity': 0.25,
+          'circle-blur': 0.8,
+        },
+      })
+
+      // Main circle layer
+      this.#map.addLayer({
+        id: 'homes-circles',
+        type: 'circle',
+        source: 'homes',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': [
+            'case',
+            ['==', ['get', 'isNew'], true], 12,
+            9,
+          ],
+          'circle-color': ['get', 'color'],
+          'circle-stroke-width': 3,
+          'circle-stroke-color': this.theme?.bg || '#FEF6E4',
+          'circle-opacity': 0.9,
+        },
+      })
+
+      // Click on cluster to zoom in
+      this.#map.on('click', 'clusters', (e) => {
+        const features = this.#map.queryRenderedFeatures(e.point, { layers: ['clusters'] })
+        const clusterId = features[0].properties.cluster_id
+        this.#map.getSource('homes').getClusterExpansionZoom(clusterId, (err, zoom) => {
+          if (err) return
+          this.#map.easeTo({
+            center: features[0].geometry.coordinates,
+            zoom: zoom,
+          })
+        })
+      })
+
+      // Click on a pin
+      this.#map.on('click', 'homes-circles', (e) => {
+        if (!e.features || !e.features.length) return
+        e.originalEvent.stopPropagation()
+        const props = e.features[0].properties
+        this.dispatchEvent(new CustomEvent('property-selected', {
+          detail: { property: featureToHome(props) },
+          bubbles: true,
+          composed: true,
+        }))
+      })
+
+      // Click on empty map area
+      this.#map.on('click', (e) => {
+        // Check if we hit a pin (the layer click handler fires first with stopPropagation)
+        const features = this.#map.queryRenderedFeatures(e.point, { layers: ['homes-circles'] })
+        if (features.length === 0) {
+          this.dispatchEvent(new CustomEvent('map-clicked', { bubbles: true, composed: true }))
+        }
+      })
+
+      // Pointer cursor on pins
+      this.#map.on('mouseenter', 'homes-circles', () => {
+        this.#map.getCanvas().style.cursor = 'pointer'
+      })
+      this.#map.on('mouseleave', 'homes-circles', () => {
+        this.#map.getCanvas().style.cursor = ''
+      })
+
+      // Pointer cursor on clusters
+      this.#map.on('mouseenter', 'clusters', () => {
+        this.#map.getCanvas().style.cursor = 'pointer'
+      })
+      this.#map.on('mouseleave', 'clusters', () => {
+        this.#map.getCanvas().style.cursor = ''
+      })
 
       // Emit viewport count on move and data changes
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
       })
-
-      // Optimize: only use sort key when zoomed in enough
-      // When zoomed out, there are too many pins for sorting to be performant
-      this.#map.on('zoom', () => {
-        this.#updateSortKeyForZoom()
-      })
-      this.#updateSortKeyForZoom() // Set initial state
-    })
-  }
-
-  #buildDominantEraColorExpression() {
-    // Build a nested case expression that checks each era's count
-    // and returns the color of the era with the highest count
-    const expression = ['case']
-    
-    // For each era (in reverse order so earlier eras take precedence in ties)
-    for (let i = ERAS.length - 1; i >= 0; i--) {
-      const era = ERAS[i]
-      const countKey = `${era.id}_count`
-      
-      // Check if this era has the most homes in the cluster
-      const isMaxCondition = ['all']
-      for (let j = 0; j < ERAS.length; j++) {
-        if (i === j) continue
-        const otherEra = ERAS[j]
-        isMaxCondition.push(['>=', ['get', countKey], ['get', `${otherEra.id}_count`]])
-      }
-      
-      expression.push(isMaxCondition, era.color)
-    }
-    
-    // Fallback color
-    expression.push(this.theme?.ink || '#1B2238')
-    
-    return expression
-  }
-
-  #installMapLayers() {
-    if (!this.#map) return
-
-    // Build cluster properties for each era to track dominant color
-    const clusterProperties = {}
-    ERAS.forEach(era => {
-      clusterProperties[`${era.id}_count`] = ['+', ['case', ['==', ['get', 'era'], era.id], 1, 0]]
-    })
-
-    this.#map.addSource('homes', {
-      type: 'geojson',
-      data: homesToGeoJSON(this.homes, this.newThisYear),
-      cluster: true,
-      clusterMinPoints: CLUSTER_MIN_POINTS,
-      clusterMaxZoom: CLUSTER_MAX_ZOOM,
-      clusterRadius: CLUSTER_RADIUS,
-      clusterProperties,
-    })
-
-    this.#map.addLayer({
-      id: 'homes-glow',
-      type: 'circle',
-      source: 'homes',
-      filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
-      paint: {
-        'circle-radius': 24,
-        'circle-color': ['get', 'color'],
-        'circle-opacity': 0.25,
-        'circle-blur': 0.8,
-      },
-    })
-
-    this.#map.addLayer({
-      id: 'homes-clusters',
-      type: 'circle',
-      source: 'homes',
-      filter: ['has', 'point_count'],
-      paint: {
-        'circle-color': this.#buildDominantEraColorExpression(),
-        'circle-opacity': 0.2,
-        'circle-stroke-width': 3,
-        'circle-stroke-color': this.theme?.bg || '#FEF6E4',
-        'circle-radius': [
-          'step',
-          ['get', 'point_count'],
-          28,
-          100, 36,
-          200, 46,
-          400, 56,
-          800, 66,
-        ],
-      },
-    })
-
-    this.#map.addLayer({
-      id: 'homes-cluster-count',
-      type: 'symbol',
-      source: 'homes',
-      filter: ['has', 'point_count'],
-      layout: {
-        'text-field': ['get', 'point_count_abbreviated'],
-        'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-        'text-size': [
-          'step',
-          ['get', 'point_count'],
-          14,
-          40, 16,
-          120, 18,
-        ],
-      },
-      paint: {
-        'text-color': this.theme?.ink || '#1B2238',
-      },
-    })
-
-    this.#map.addLayer({
-      id: 'homes-circles',
-      type: 'circle',
-      source: 'homes',
-      filter: ['!', ['has', 'point_count']],
-      paint: {
-        'circle-radius': 9,
-        'circle-color': ['get', 'color'],
-        'circle-stroke-width': 3,
-        'circle-stroke-color': this.theme?.bg || '#FEF6E4',
-        'circle-opacity': 0.9,
-        'circle-opacity-transition': { duration: 500 },
-      },
-    })
-  }
-
-  #updateSortKeyForZoom() {
-    if (!this.#map || !this.#mapReady) return
-    const zoom = this.#map.getZoom()
-    const ZOOM_THRESHOLD = 14 // Only sort when zoomed in past this level
-    
-    // Enable sorting when zoomed in, disable when zoomed out for performance
-    const sortKey = zoom >= ZOOM_THRESHOLD ? ['get', 'index'] : undefined
-    
-    if (this.#map.getLayer('homes-circles')) {
-      this.#map.setLayoutProperty('homes-circles', 'circle-sort-key', sortKey)
-    }
-    if (this.#map.getLayer('homes-glow')) {
-      this.#map.setLayoutProperty('homes-glow', 'circle-sort-key', sortKey)
-    }
-  }
-
-  #updateEraOpacity(eraId, instant = false) {
-    if (!this.#map || !this.#mapReady) return
-    const layer = this.#map.getLayer('homes-circles')
-    const glowLayer = this.#map.getLayer('homes-glow')
-    if (!layer) return
-
-    const duration = instant ? 0 : 500
-    this.#map.setPaintProperty('homes-circles', 'circle-opacity-transition', { duration })
-    if (glowLayer) {
-      this.#map.setPaintProperty('homes-glow', 'circle-opacity-transition', { duration })
-    }
-
-    if (!eraId) {
-      // Restore full opacity
-      this.#map.setPaintProperty('homes-circles', 'circle-opacity', 0.9)
-      if (glowLayer) {
-        this.#map.setPaintProperty('homes-glow', 'circle-opacity', 0.25)
-      }
-    } else {
-      // Find the era and get its index
-      const currentEraIndex = ERAS.findIndex(e => e.id === eraId)
-      if (currentEraIndex === -1) return
-      
-      // Fade pins from previous eras, keep current era at full opacity
-      const previousEraIds = ERAS.slice(0, currentEraIndex).map(e => e.id)
-      
-      if (previousEraIds.length === 0) {
-        // First era, everything at full opacity
-        this.#map.setPaintProperty('homes-circles', 'circle-opacity', 0.9)
-        if (glowLayer) {
-          this.#map.setPaintProperty('homes-glow', 'circle-opacity', 0.25)
-        }
-      } else {
-        // Build match expression for previous eras
-        const matchExpression = [
-          'match',
-          ['get', 'era'],
-          previousEraIds,
-          0.25, // opacity for previous eras
-          0.9   // opacity for current era
-        ]
-        
-        this.#map.setPaintProperty('homes-circles', 'circle-opacity', matchExpression)
-        if (glowLayer) {
-          const glowMatchExpression = [
-            'match',
-            ['get', 'era'],
-            previousEraIds,
-            0.08,
-            0.25
-          ]
-          this.#map.setPaintProperty('homes-glow', 'circle-opacity', glowMatchExpression)
-        }
-      }
-    }
-  }
-
-  #bindMapEvents() {
-    if (!this.#map) return
-
-    this.#map.on('click', 'homes-circles', (e) => {
-      if (!e.features || !e.features.length) return
-      e.originalEvent.stopPropagation()
-      const props = e.features[0].properties
-      this.dispatchEvent(new CustomEvent('property-selected', {
-        detail: { property: featureToHome(props) },
-        bubbles: true,
-        composed: true,
-      }))
-    })
-
-    this.#map.on('click', 'homes-clusters', (e) => {
-      const cluster = e.features?.[0]
-      if (!cluster) return
-      e.originalEvent.stopPropagation()
-      const source = this.#map.getSource('homes')
-      source.getClusterExpansionZoom(cluster.properties.cluster_id, (err, zoom) => {
-        if (err) return
-        this.#map.easeTo({ center: cluster.geometry.coordinates, zoom })
-      })
-    })
-
-    this.#map.on('click', (e) => {
-      const features = this.#map.queryRenderedFeatures(e.point, {
-        layers: ['homes-circles', 'homes-clusters'],
-      })
-      if (features.length === 0) {
-        this.dispatchEvent(new CustomEvent('map-clicked', { bubbles: true, composed: true }))
-      }
-    })
-
-    this.#map.on('mouseenter', 'homes-circles', () => {
-      this.#map.getCanvas().style.cursor = 'pointer'
-    })
-    this.#map.on('mouseleave', 'homes-circles', () => {
-      this.#map.getCanvas().style.cursor = ''
-    })
-    this.#map.on('mouseenter', 'homes-clusters', () => {
-      this.#map.getCanvas().style.cursor = 'pointer'
-    })
-    this.#map.on('mouseleave', 'homes-clusters', () => {
-      this.#map.getCanvas().style.cursor = ''
-    })
-  }
-
-  #scheduleResize() {
-    if (!this.#map) return
-    if (this.#resizeFrame) cancelAnimationFrame(this.#resizeFrame)
-    this.#resizeFrame = requestAnimationFrame(() => {
-      this.#resizeFrame = 0
-      this.#map?.resize()
     })
   }
 
@@ -423,21 +285,10 @@ customElements.define('map-view', class extends LitElement {
     this.#viewportCountTimer = setTimeout(() => {
       this.#viewportCountTimer = null
       if (!this.#map || !this.#mapReady) return
-      const features = this.#map.queryRenderedFeatures(undefined, {
-        layers: ['homes-circles', 'homes-clusters'],
-      })
-      let count = 0
-      const unique = new Set()
-      features.forEach(feature => {
-        const pointCount = feature.properties?.point_count
-        if (pointCount != null) {
-          count += Number(pointCount)
-          return
-        }
-        unique.add(feature.properties.id)
-      })
+      const features = this.#map.queryRenderedFeatures({ layers: ['homes-circles'] })
+      const unique = new Set(features.map(f => f.properties.id))
       this.dispatchEvent(new CustomEvent('viewport-count', {
-        detail: { count: count + unique.size },
+        detail: { count: unique.size },
         bubbles: true,
         composed: true,
       }))
@@ -455,44 +306,13 @@ customElements.define('map-view', class extends LitElement {
   updated(changed) {
     if (!this.#map || !this.#mapReady) return
 
-    // Update GeoJSON data ONLY when homes or newThisYear actually change
-    // Pre-sorted data ensures correct z-ordering without expensive circle-sort-key
-    if (changed.has('homes') || changed.has('newThisYear')) {
-      const newJSON = JSON.stringify({ homes: this.homes, newThisYear: Array.from(this.newThisYear || []) })
-      if (newJSON !== this.#lastHomesJSON) {
-        this.#lastHomesJSON = newJSON
-        const src = this.#map.getSource('homes')
-        if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
-        requestAnimationFrame(() => this.#emitViewportCount())
-      }
-    }
+    // Update GeoJSON data when homes or newThisYear change
+    if (changed.has('homes') || changed.has('newThisYear') || changed.has('year')) {
+      const src = this.#map.getSource('homes')
+      if (src) src.setData(homesToGeoJSON(this.homes, this.newThisYear))
 
-    // Handle era transitions with opacity fading - only after movement settles
-    if (changed.has('year') && this.year) {
-      const newEra = eraFor(this.year)
-      
-      // Clear any pending fade restore timer
-      if (this.#eraFadeTimer) {
-        clearTimeout(this.#eraFadeTimer)
-        this.#eraFadeTimer = null
-      }
-      
-      // If era changed or we're starting, apply the fade immediately
-      if (newEra.id !== this.#currentEra) {
-        this.#currentEra = newEra.id
-        this.#updateEraOpacity(newEra.id, true)
-      }
-      
-      // Clear any existing settle timer
-      if (this.#eraSettleTimer) {
-        clearTimeout(this.#eraSettleTimer)
-      }
-      
-      // Wait for movement to stop before restoring full opacity
-      this.#eraSettleTimer = setTimeout(() => {
-        this.#eraSettleTimer = null
-        this.#updateEraOpacity(null)
-      }, 1200)
+      // Update viewport count after data change
+      requestAnimationFrame(() => this.#emitViewportCount())
     }
 
     // Update stroke color + map style when theme changes
@@ -504,19 +324,112 @@ customElements.define('map-view', class extends LitElement {
       if (this.#map.getLayer('homes-circles')) {
         this.#map.setPaintProperty('homes-circles', 'circle-stroke-color', this.theme.bg)
       }
-      if (this.#map.getLayer('homes-clusters')) {
-        this.#map.setPaintProperty('homes-clusters', 'circle-color', this.#buildDominantEraColorExpression())
-        this.#map.setPaintProperty('homes-clusters', 'circle-stroke-color', this.theme.bg)
-      }
-      if (this.#map.getLayer('homes-cluster-count')) {
-        this.#map.setPaintProperty('homes-cluster-count', 'text-color', this.theme.ink)
-      }
 
       // Switch Mapbox base style if theme category changed
       if (newStyle !== this.#currentStyle) {
         this.#currentStyle = newStyle
         this.#map.once('style.load', () => {
-          this.#installMapLayers()
+          // Re-add sources and layers after style swap
+          const isDesktop = window.innerWidth >= 768
+          const sourceConfig = {
+            type: 'geojson',
+            data: homesToGeoJSON(this.homes, this.newThisYear),
+            cluster: true,
+            clusterMaxZoom: isDesktop ? 14 : 12,  // Cluster less aggressively on mobile
+            clusterRadius: isDesktop ? 80 : 60,
+            clusterProperties: {
+              // Count homes per era in each cluster
+              early: ['+', ['case', ['==', ['get', 'era'], 'early'], 1, 0]],
+              gilded: ['+', ['case', ['==', ['get', 'era'], 'gilded'], 1, 0]],
+              victorian: ['+', ['case', ['==', ['get', 'era'], 'victorian'], 1, 0]],
+              craftsman: ['+', ['case', ['==', ['get', 'era'], 'craftsman'], 1, 0]],
+              depression: ['+', ['case', ['==', ['get', 'era'], 'depression'], 1, 0]],
+              midcentury: ['+', ['case', ['==', ['get', 'era'], 'midcentury'], 1, 0]],
+              modernist: ['+', ['case', ['==', ['get', 'era'], 'modernist'], 1, 0]],
+              revival: ['+', ['case', ['==', ['get', 'era'], 'revival'], 1, 0]],
+              contemp: ['+', ['case', ['==', ['get', 'era'], 'contemp'], 1, 0]],
+            },
+          }
+          
+          this.#map.addSource('homes', sourceConfig)
+
+          // Add cluster layers
+          this.#map.addLayer({
+            id: 'clusters',
+            type: 'circle',
+            source: 'homes',
+            filter: ['has', 'point_count'],
+            paint: {
+              'circle-color': [
+                'case',
+                // Check which era has the most homes in this cluster
+                ['>=', ['get', 'early'], ['max', ['get', 'gilded'], ['get', 'victorian'], ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#C9A66B',
+                ['>=', ['get', 'gilded'], ['max', ['get', 'victorian'], ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#B8860B',
+                ['>=', ['get', 'victorian'], ['max', ['get', 'craftsman'], ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#8E4A7F',
+                ['>=', ['get', 'craftsman'], ['max', ['get', 'depression'], ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#A65A3A',
+                ['>=', ['get', 'depression'], ['max', ['get', 'midcentury'], ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#5A6B7A',
+                ['>=', ['get', 'midcentury'], ['max', ['get', 'modernist'], ['get', 'revival'], ['get', 'contemp']]], '#E8A87C',
+                ['>=', ['get', 'modernist'], ['max', ['get', 'revival'], ['get', 'contemp']]], '#6B8E7F',
+                ['>=', ['get', 'revival'], ['get', 'contemp']], '#C97B63',
+                '#F582AE' // contemp or fallback
+              ],
+              'circle-radius': [
+                'step',
+                ['get', 'point_count'],
+                20,
+                10,
+                25,
+                25,
+                30,
+                50,
+                35,
+              ],
+              'circle-stroke-width': 3,
+              'circle-stroke-color': this.theme.bg,
+              'circle-opacity': 0.85,
+            },
+          })
+
+          this.#map.addLayer({
+            id: 'cluster-count',
+            type: 'symbol',
+            source: 'homes',
+            filter: ['has', 'point_count'],
+            layout: {
+              'text-field': '{point_count_abbreviated}',
+              'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+              'text-size': 13,
+            },
+            paint: {
+              'text-color': this.theme.bg,
+            },
+          })
+
+          this.#map.addLayer({
+            id: 'homes-glow',
+            type: 'circle',
+            source: 'homes',
+            filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
+            paint: {
+              'circle-radius': 24,
+              'circle-color': ['get', 'color'],
+              'circle-opacity': 0.25,
+              'circle-blur': 0.8,
+            },
+          })
+          this.#map.addLayer({
+            id: 'homes-circles',
+            type: 'circle',
+            source: 'homes',
+            filter: ['!', ['has', 'point_count']],
+            paint: {
+              'circle-radius': ['case', ['==', ['get', 'isNew'], true], 12, 9],
+              'circle-color': ['get', 'color'],
+              'circle-stroke-width': 3,
+              'circle-stroke-color': this.theme.bg,
+              'circle-opacity': 0.9,
+            },
+          })
         })
         this.#map.setStyle(newStyle)
       }
@@ -537,9 +450,6 @@ customElements.define('map-view', class extends LitElement {
         map-view .mapbox-container {
           position: absolute;
           inset: 0;
-          width: 100%;
-          height: 100%;
-          min-height: 100%;
         }
         map-view .mapboxgl-ctrl-group {
           border-radius: 14px !important;
@@ -550,9 +460,39 @@ customElements.define('map-view', class extends LitElement {
           width: 36px !important;
           height: 36px !important;
         }
+        map-view .map-badge {
+          position: absolute;
+          top: 12px;
+          left: 12px;
+          z-index: 2;
+          pointer-events: none;
+        }
+        map-view .map-badge-inner {
+          background: ${t.sheet || '#fff'};
+          border-radius: 999px;
+          padding: 6px 12px 6px 10px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04);
+          font-size: 12px;
+          font-weight: 600;
+          color: ${t.ink || '#000'};
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          pointer-events: auto;
+        }
       </style>
 
       <div class="mapbox-container"></div>
+
+      <div class="map-badge">
+        <div class="map-badge-inner">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <circle cx="6" cy="6" r="5" fill="none" stroke="${t.ink || '#000'}" stroke-width="1.2"/>
+            <circle cx="6" cy="6" r="1.5" fill="${t.ink || '#000'}"/>
+          </svg>
+          Downtown Milwaukee
+        </div>
+      </div>
     `
   }
 })
