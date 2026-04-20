@@ -288,10 +288,22 @@ customElements.define('map-view', class extends LitElement {
     this.#viewportCountTimer = setTimeout(() => {
       this.#viewportCountTimer = null
       if (!this.#map || !this.#mapReady) return
-      const features = this.#map.queryRenderedFeatures({ layers: ['homes-circles'] })
-      const unique = new Set(features.map(f => f.properties.id))
+      
+      // Count individual visible homes
+      const individualHomes = this.#map.queryRenderedFeatures({ layers: ['homes-circles'] })
+      const uniqueIndividual = new Set(individualHomes.map(f => f.properties.id))
+      
+      // Count homes in clusters
+      const clusters = this.#map.queryRenderedFeatures({ layers: ['clusters'] })
+      const clusterCount = clusters.reduce((sum, cluster) => {
+        return sum + (cluster.properties.point_count || 0)
+      }, 0)
+      
+      // Total is individual homes plus all homes in clusters
+      const totalCount = uniqueIndividual.size + clusterCount
+      
       this.dispatchEvent(new CustomEvent('viewport-count', {
-        detail: { count: unique.size },
+        detail: { count: totalCount },
         bubbles: true,
         composed: true,
       }))
