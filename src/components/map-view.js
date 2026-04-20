@@ -41,7 +41,9 @@ function homesToGeoJSON(homes, newThisYear) {
 }
 
 // Resolve a home object from feature properties (restore full object for event)
-function featureToHome(props) {
+function featureToHome(feature) {
+  const props = feature.properties
+  const coords = feature.geometry.coordinates
   return {
     id: props.id,
     year: props.year,
@@ -50,6 +52,8 @@ function featureToHome(props) {
     address: props.address,
     beds: props.beds,
     sqft: props.sqft,
+    lng: coords[0],
+    lat: coords[1],
   }
 }
 
@@ -239,9 +243,8 @@ customElements.define('map-view', class extends LitElement {
       this.#map.on('click', 'homes-circles', (e) => {
         if (!e.features || !e.features.length) return
         e.originalEvent.stopPropagation()
-        const props = e.features[0].properties
         this.dispatchEvent(new CustomEvent('property-selected', {
-          detail: { property: featureToHome(props) },
+          detail: { property: featureToHome(e.features[0]) },
           bubbles: true,
           composed: true,
         }))
@@ -483,16 +486,6 @@ customElements.define('map-view', class extends LitElement {
       </style>
 
       <div class="mapbox-container"></div>
-
-      <div class="map-badge">
-        <div class="map-badge-inner">
-          <svg width="12" height="12" viewBox="0 0 12 12">
-            <circle cx="6" cy="6" r="5" fill="none" stroke="${t.ink || '#000'}" stroke-width="1.2"/>
-            <circle cx="6" cy="6" r="1.5" fill="${t.ink || '#000'}"/>
-          </svg>
-          Downtown Milwaukee
-        </div>
-      </div>
     `
   }
 })
