@@ -185,10 +185,13 @@ customElements.define('bottom-sheet', class extends LitElement {
   #getStreetViewUrl() {
     // Lazy load: only generate URL when actually needed for rendering
     if (!this.#imageLoaded && this.property && StreetViewService.isConfigured() && 
-        this.property.lat && this.property.lng) {
+        this.property.address) {
+      // Use address instead of lat/lng for better accuracy
+      // Add city/state to make address more specific
+      const fullAddress = `${this.property.address}, Milwaukee, WI`
       this.#streetViewUrl = StreetViewService.getImageUrl(
-        this.property.lat,
-        this.property.lng,
+        fullAddress,
+        null,  // No lng needed when using address
         { 
           width: 800,    // Higher resolution for better quality
           height: 400,   // 2:1 aspect ratio
