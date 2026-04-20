@@ -118,7 +118,12 @@ customElements.define('time-slider', class extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     this._onMove = this.#handleMove.bind(this)
-    this._onUp = () => { this.#dragging = false }
+    this._onUp = () => {
+      if (this.#dragging) {
+        this.#dragging = false
+        this.dispatchEvent(new CustomEvent('scrub-end', { bubbles: true, composed: true }))
+      }
+    }
     window.addEventListener('mousemove', this._onMove)
     window.addEventListener('mouseup', this._onUp)
     window.addEventListener('touchmove', this._onMove, { passive: false })
@@ -155,6 +160,8 @@ customElements.define('time-slider', class extends LitElement {
 
   #onDown(e) {
     this.#dragging = true
+    console.log('time-slider: dispatching scrub-start')
+    this.dispatchEvent(new CustomEvent('scrub-start', { bubbles: true, composed: true }))
     const clientX = e.touches ? e.touches[0].clientX : e.clientX
     this.#computeYear(clientX)
   }

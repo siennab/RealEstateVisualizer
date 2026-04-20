@@ -30,6 +30,7 @@ customElements.define('app-shell', class extends LitElement {
   #state = store.state
   #viewportCount = 0
   #hasClusters = false
+  #isScrubbing = false
 
   connectedCallback() {
     super.connectedCallback()
@@ -96,6 +97,18 @@ customElements.define('app-shell', class extends LitElement {
     store.deselectProperty()
   }
 
+  #onScrubStart() {
+    console.log('app-shell: scrub-start received')
+    this.#isScrubbing = true
+    this.requestUpdate()
+  }
+
+  #onScrubEnd() {
+    console.log('app-shell: scrub-end received')
+    this.#isScrubbing = false
+    this.requestUpdate()
+  }
+
   #onEraSelected(e) {
     const era = e.detail.era
     store.pause()
@@ -159,6 +172,9 @@ customElements.define('app-shell', class extends LitElement {
             .newThisYear=${newSet}
             .theme=${t}
             .year=${s.year}
+            .isScrubbing=${this.#isScrubbing}
+            .isPlaying=${s.playing}
+            .activeEra=${eraFor(s.year)?.id}
             @property-selected=${this.#onPropertySelected.bind(this)}
             @map-clicked=${this.#onMapClicked.bind(this)}
             @viewport-count=${this.#onViewportCount.bind(this)}
@@ -213,6 +229,8 @@ customElements.define('app-shell', class extends LitElement {
             .year=${s.year}
             .theme=${t}
             @year-changed=${this.#onYearChanged.bind(this)}
+            @scrub-start=${this.#onScrubStart.bind(this)}
+            @scrub-end=${this.#onScrubEnd.bind(this)}
           ></time-slider>
 
           <play-controls

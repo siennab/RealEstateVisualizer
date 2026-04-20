@@ -9,9 +9,10 @@ const MIN_ZOOM = 11
 const MAX_ZOOM = 19
 
 // Map Mapbox base styles to themes
+// Using Outdoors style for cream theme - minimal, clean aesthetic like mockup
 const STYLE_FOR_THEME = {
-  cream:    'mapbox://styles/mapbox/light-v11',
-  mint:     'mapbox://styles/mapbox/light-v11',
+  cream:    'mapbox://styles/siennabast/cmo7okcsd000d01qk3mxzapqe',
+  mint:     'mapbox://styles/mapbox/outdoors-v12',
   midnight: 'mapbox://styles/mapbox/dark-v11',
 }
 
@@ -65,6 +66,9 @@ customElements.define('map-view', class extends LitElement {
     newThisYear: { type: Object },
     theme:       { type: Object },
     year:        { type: Number },
+    isScrubbing: { type: Boolean },
+    isPlaying:   { type: Boolean },
+    activeEra:   { type: String },
   }
 
   #map = null
@@ -193,36 +197,49 @@ customElements.define('map-view', class extends LitElement {
         },
       })
 
-      // Glow layer for newly-built homes
+      // Glow layer for newly-built homes (subtle pulse)
       this.#map.addLayer({
         id: 'homes-glow',
         type: 'circle',
         source: 'homes',
         filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
         paint: {
-          'circle-radius': 24,
+          'circle-radius': [
+            'interpolate', ['linear'], ['zoom'],
+            11, 12,
+            14, 20,
+            19, 35
+          ],
           'circle-color': ['get', 'color'],
-          'circle-opacity': 0.25,
-          'circle-blur': 0.8,
+          'circle-opacity': 0.2,
+          'circle-blur': 0.6,
         },
       })
 
-      // Main circle layer
+      // Donut-style pins that scale with zoom (like mockup)
       this.#map.addLayer({
         id: 'homes-circles',
         type: 'circle',
         source: 'homes',
         filter: ['!', ['has', 'point_count']],
         paint: {
+          // Solid colored circle with cream border
           'circle-radius': [
-            'case',
-            ['==', ['get', 'isNew'], true], 12,
-            9,
+            'interpolate', ['linear'], ['zoom'],
+            11, ['case', ['==', ['get', 'isNew'], true], 6, 4.5],
+            14, ['case', ['==', ['get', 'isNew'], true], 9, 7.5],
+            19, ['case', ['==', ['get', 'isNew'], true], 13.5, 12]
           ],
           'circle-color': ['get', 'color'],
-          'circle-stroke-width': 3,
+          'circle-stroke-width': [
+            'interpolate', ['linear'], ['zoom'],
+            11, 1.5,
+            14, 2,
+            19, 3
+          ],
           'circle-stroke-color': this.theme?.bg || '#FEF6E4',
-          'circle-opacity': 0.9,
+          'circle-opacity': 1,
+          'circle-stroke-opacity': 1,
         },
       })
 
@@ -328,6 +345,40 @@ customElements.define('map-view', class extends LitElement {
       requestAnimationFrame(() => this.#emitViewportCount())
     }
 
+    // Update opacity when scrubbing/playing state or active era changes
+    if ((changed.has('isScrubbing') || changed.has('isPlaying') || changed.has('activeEra')) && this.#map.getLayer('homes-circles')) {
+      const shouldDim = (this.isScrubbing || this.isPlaying) && this.activeEra
+      console.log('map-view: dimming changed', { isScrubbing: this.isScrubbing, isPlaying: this.isPlaying, activeEra: this.activeEra, shouldDim })
+      if (shouldDim) {
+        // Dim non-active eras during scrubbing or playback
+        this.#map.setPaintProperty('homes-circles', 'circle-opacity', [
+          'case',
+          ['==', ['get', 'era'], this.activeEra], 1,
+          0.3
+        ])
+        this.#map.setPaintProperty('homes-circles', 'circle-stroke-opacity', [
+          'case',
+          ['==', ['get', 'era'], this.activeEra], 1,
+          0.3
+        ])
+        // Also dim the glow layer
+        if (this.#map.getLayer('homes-glow')) {
+          this.#map.setPaintProperty('homes-glow', 'circle-opacity', [
+            'case',
+            ['==', ['get', 'era'], this.activeEra], 0.2,
+            0.05
+          ])
+        }
+      } else {
+        // Full opacity when not scrubbing
+        this.#map.setPaintProperty('homes-circles', 'circle-opacity', 1)
+        this.#map.setPaintProperty('homes-circles', 'circle-stroke-opacity', 1)
+        if (this.#map.getLayer('homes-glow')) {
+          this.#map.setPaintProperty('homes-glow', 'circle-opacity', 0.2)
+        }
+      }
+    }
+
     // Update stroke color + map style when theme changes
     if (changed.has('theme') && this.theme) {
       const newKey = this.#resolveThemeKey()
@@ -424,10 +475,15 @@ customElements.define('map-view', class extends LitElement {
             source: 'homes',
             filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'isNew'], true]],
             paint: {
-              'circle-radius': 24,
+              'circle-radius': [
+                'interpolate', ['linear'], ['zoom'],
+                11, 12,
+                14, 20,
+                19, 35
+              ],
               'circle-color': ['get', 'color'],
-              'circle-opacity': 0.25,
-              'circle-blur': 0.8,
+              'circle-opacity': 0.2,
+              'circle-blur': 0.6,
             },
           })
           this.#map.addLayer({
@@ -436,11 +492,22 @@ customElements.define('map-view', class extends LitElement {
             source: 'homes',
             filter: ['!', ['has', 'point_count']],
             paint: {
-              'circle-radius': ['case', ['==', ['get', 'isNew'], true], 12, 9],
+              'circle-radius': [
+                'interpolate', ['linear'], ['zoom'],
+                11, ['case', ['==', ['get', 'isNew'], true], 6, 4.5],
+                14, ['case', ['==', ['get', 'isNew'], true], 9, 7.5],
+                19, ['case', ['==', ['get', 'isNew'], true], 13.5, 12]
+              ],
               'circle-color': ['get', 'color'],
-              'circle-stroke-width': 3,
+              'circle-stroke-width': [
+                'interpolate', ['linear'], ['zoom'],
+                11, 1.5,
+                14, 2,
+                19, 3
+              ],
               'circle-stroke-color': this.theme.bg,
-              'circle-opacity': 0.9,
+              'circle-opacity': 1,
+              'circle-stroke-opacity': 1,
             },
           })
         })
