@@ -11,6 +11,7 @@ class AppStore {
     isolatedEraId: null,
     selectedProperty: null,
     dataReady: false,
+    pinnedYear: null,
   }
   #listeners = new Set()
   #playTimer = null
@@ -37,6 +38,8 @@ class AppStore {
   }
 
   setYear(year) { this.#set({ year: Math.max(1800, Math.min(2026, year)) }) }
+  setPinnedYear(year) { this.#set({ pinnedYear: year, year: Math.max(1800, Math.min(2026, year)) }) }
+  clearPinnedYear() { this.#set({ pinnedYear: null }) }
   setTheme(theme) { this.#set({ theme }) }
   setIsolatedEra(eraId) { this.#set({ isolatedEraId: eraId ?? null, selectedProperty: null }) }
   toggleIsolatedEra(eraId) {
@@ -71,16 +74,23 @@ class AppStore {
   }
 
   visibleHomes(year = this.#state.year) {
+    const pinned = this.#state.pinnedYear
     return allRecords().filter(r => {
-      if (r.year > year) return false
+      if (pinned) {
+        if (r.year !== pinned) return false
+      } else {
+        if (r.year > year) return false
+      }
       if (!this.#state.isolatedEraId) return true
       return r.era === this.#state.isolatedEraId
     })
   }
 
   newThisYear(year = this.#state.year) {
+    const pinned = this.#state.pinnedYear
+    const targetYear = pinned || year
     return new Set(allRecords().filter(r => {
-      if (r.year !== year) return false
+      if (r.year !== targetYear) return false
       if (!this.#state.isolatedEraId) return true
       return r.era === this.#state.isolatedEraId
     }).map(h => h.id))

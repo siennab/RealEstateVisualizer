@@ -99,6 +99,7 @@ customElements.define('app-shell', class extends LitElement {
 
   #onScrubStart() {
     console.log('app-shell: scrub-start received')
+    store.clearPinnedYear()
     this.#isScrubbing = true
     this.requestUpdate()
   }
@@ -126,7 +127,12 @@ customElements.define('app-shell', class extends LitElement {
   #onYearChanged(e) {
     store.pause()
     store.clearIsolatedEra()
-    store.setYear(e.detail.year)
+    if (e.detail.exact) {
+      store.setPinnedYear(e.detail.year)
+    } else {
+      store.clearPinnedYear()
+      store.setYear(e.detail.year)
+    }
   }
 
   #onPlayToggled() {
@@ -134,12 +140,14 @@ customElements.define('app-shell', class extends LitElement {
       store.pause()
     } else {
       store.clearIsolatedEra()
+      store.clearPinnedYear()
       store.play()
     }
   }
 
   #onPlayReset() {
     store.clearIsolatedEra()
+    store.clearPinnedYear()
     store.reset()
   }
 
@@ -210,6 +218,7 @@ customElements.define('app-shell', class extends LitElement {
             .count=${this.#viewportCount}
             .hasClusters=${this.#hasClusters}
             .theme=${t}
+            .pinnedYear=${s.pinnedYear}
             @year-changed=${this.#onYearChanged.bind(this)}
           ></hero-counter>
 
@@ -228,6 +237,7 @@ customElements.define('app-shell', class extends LitElement {
           <time-slider
             .year=${s.year}
             .theme=${t}
+            .pinnedYear=${s.pinnedYear}
             @year-changed=${this.#onYearChanged.bind(this)}
             @scrub-start=${this.#onScrubStart.bind(this)}
             @scrub-end=${this.#onScrubEnd.bind(this)}
