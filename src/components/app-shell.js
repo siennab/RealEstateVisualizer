@@ -1,5 +1,5 @@
 import { LitElement, html } from 'lit'
-import { store, ERAS, eraFor } from '../store.js'
+import { store, ERAS, eraFor, CITIES } from '../store.js'
 import { THEMES, applyTheme } from '../styles/themes.js'
 import { HOMES } from '../data/sample-data.js'
 
@@ -167,6 +167,40 @@ customElements.define('app-shell', class extends LitElement {
         overflow:hidden;
         ${desktop ? '' : 'display:flex;flex-direction:column;'}
       ">
+        <!-- CITY TOGGLE -->
+        <div style="
+          position:absolute;
+          top:12px;
+          right:12px;
+          z-index:500;
+          display:flex;
+          background:${t.sheet || t.bg};
+          border-radius:999px;
+          box-shadow:0 2px 10px rgba(0,0,0,0.10), 0 0 0 0.5px rgba(0,0,0,0.04);
+          padding:3px;
+          gap:2px;
+          font-family:'Geist',-apple-system,system-ui,sans-serif;
+        ">
+          ${Object.values(CITIES).map(c => html`
+            <button
+              @click=${() => store.setCity(c.id)}
+              style="
+                border:none;
+                outline:none;
+                cursor:pointer;
+                padding:5px 14px;
+                border-radius:999px;
+                font-size:12px;
+                font-weight:600;
+                letter-spacing:0.02em;
+                transition:all 0.2s ease;
+                background:${s.city === c.id ? t.ink : 'transparent'};
+                color:${s.city === c.id ? t.bg : t.ink + '88'};
+              "
+            >${c.label}</button>
+          `)}
+        </div>
+
         <!-- MAP -->
         <div style="${desktop
           ? 'position:absolute;inset:0;'
