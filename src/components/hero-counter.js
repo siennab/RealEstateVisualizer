@@ -56,13 +56,6 @@ customElements.define('hero-counter', class extends LitElement {
       padding: 0 8px;
       user-select: text;
       -webkit-user-select: text;
-      -moz-appearance: textfield;
-      appearance: textfield;
-    }
-    .year-input::-webkit-outer-spin-button,
-    .year-input::-webkit-inner-spin-button {
-      -webkit-appearance: none;
-      margin: 0;
     }
     .right {
       text-align: right;
@@ -81,23 +74,6 @@ customElements.define('hero-counter', class extends LitElement {
       text-transform: uppercase;
       margin-top: 2px;
     }
-    .pinned-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      padding: 3px 8px;
-      border-radius: 4px;
-      margin-top: 4px;
-      opacity: 0.85;
-    }
-    .pinned-icon {
-      font-size: 11px;
-      line-height: 1;
-    }
   `
 
   static properties = {
@@ -105,7 +81,6 @@ customElements.define('hero-counter', class extends LitElement {
     count: { type: Number },
     hasClusters: { type: Boolean },
     theme: { type: Object },
-    pinnedYear: { type: Number },
   }
 
   #editMode = false
@@ -136,7 +111,7 @@ customElements.define('hero-counter', class extends LitElement {
       const value = parseInt(e.target.value, 10)
       if (value >= 1800 && value <= 2026) {
         this.dispatchEvent(new CustomEvent('year-changed', {
-          detail: { year: value, exact: true },
+          detail: { year: value },
           bubbles: true,
           composed: true,
         }))
@@ -186,11 +161,6 @@ customElements.define('hero-counter', class extends LitElement {
               ${this.year || 1800}
             </div>
           `}
-          ${this.pinnedYear ? html`
-            <div class="pinned-badge" style="background:${t.accent}22;color:${t.accent}">
-              <span class="pinned-icon">&#x1F4CC;</span> Only ${this.pinnedYear}
-            </div>
-          ` : ''}
         </div>
         ${!this.hasClusters ? html`
           <div class="right">

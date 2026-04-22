@@ -3,7 +3,7 @@
 
 import { eraFor } from '../data/sample-data.js'
 
-const JSON_URL = '/mprop_min.json'
+const JSON_URL = `${import.meta.env.BASE_URL}mprop_min.json`
 
 let records = null    // [{id, address, year, zip, era, lng, lat}]
 let loading = null
@@ -31,6 +31,8 @@ async function load() {
         sqft: null,
       })
     }
+    // Sort by year ascending so newer homes render on top in map layers
+    records.sort((a, b) => a.year - b.year)
     return records
   })()
   return loading

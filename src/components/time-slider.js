@@ -106,30 +106,11 @@ customElements.define('time-slider', class extends LitElement {
       letter-spacing: 0.05em;
       margin-top: -4px;
     }
-    .pinned-line {
-      position: absolute;
-      top: 4px;
-      bottom: 4px;
-      width: 2px;
-      border-radius: 1px;
-      transform: translateX(-50%);
-      pointer-events: none;
-    }
-    .pinned-hint {
-      font-size: 9px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      text-align: center;
-      margin-top: 0;
-      padding: 2px 0;
-    }
   `
 
   static properties = {
     year:  { type: Number },
     theme: { type: Object },
-    pinnedYear: { type: Number },
   }
 
   #dragging = false
@@ -189,8 +170,6 @@ customElements.define('time-slider', class extends LitElement {
     const t = this.theme || {}
     const year = this.year || MIN
     const pct = (year - MIN) / (MAX - MIN)
-    const pinned = this.pinnedYear
-    const pinnedPct = pinned ? (pinned - MIN) / (MAX - MIN) : 0
 
     return html`
       <div class="wrap">
@@ -246,18 +225,11 @@ customElements.define('time-slider', class extends LitElement {
             style="
               left:${pct * 100}%;
               background:${t.bg};
-              border:3px solid ${pinned ? t.accent : t.ink};
+              border:3px solid ${t.ink};
             "
           >
             <div class="thumb-dot" style="background:${t.accent}"></div>
           </div>
-
-          ${pinned ? html`
-            <div
-              class="pinned-line"
-              style="left:${pinnedPct * 100}%;background:${t.accent}"
-            ></div>
-          ` : ''}
         </div>
 
         <!-- year labels -->
@@ -267,9 +239,6 @@ customElements.define('time-slider', class extends LitElement {
           <span>2000</span>
           <span>NOW</span>
         </div>
-        ${pinned ? html`
-          <div class="pinned-hint" style="color:${t.accent}">Showing only ${pinned} • scrub to reset</div>
-        ` : ''}
       </div>
     `
   }
