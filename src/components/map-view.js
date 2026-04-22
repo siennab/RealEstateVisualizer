@@ -1,9 +1,10 @@
 import { LitElement, html } from 'lit'
 import mapboxgl from 'mapbox-gl'
-import { ERAS } from '../store.js'
+import { ERAS, CITIES } from '../store.js'
+import { cityForCenter } from '../services/mprop-data.js'
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
-const CENTER = [-87.9065, 43.0389] // Downtown Milwaukee [lng, lat]
+const DEFAULT_CENTER = CITIES.mke.center
 const ZOOM = 14
 const MIN_ZOOM = 11
 const MAX_ZOOM = 19
@@ -69,6 +70,7 @@ customElements.define('map-view', class extends LitElement {
     isScrubbing: { type: Boolean },
     isPlaying:   { type: Boolean },
     activeEra:   { type: String },
+    city:        { type: String },
   }
 
   #map = null
@@ -110,7 +112,7 @@ customElements.define('map-view', class extends LitElement {
     this.#map = new mapboxgl.Map({
       container,
       style: this.#currentStyle,
-      center: CENTER,
+      center: this.city ? (CITIES[this.city]?.center || DEFAULT_CENTER) : DEFAULT_CENTER,
       zoom: ZOOM,
       minZoom: MIN_ZOOM,
       maxZoom: MAX_ZOOM,
@@ -304,11 +306,26 @@ customElements.define('map-view', class extends LitElement {
         this.#map.getCanvas().style.cursor = ''
       })
 
-      // Emit viewport count on move and data changes
+      // Emit viewport count on move and detect city changes
       this.#map.on('moveend', () => {
         this.#emitViewportCount()
+        this.#detectCity()
       })
     })
+  }
+
+  /** Check if the viewport center has crossed into a different city region. */
+  #detectCity() {
+    if (!this.#map) return
+    const { lng, lat } = this.#map.getCenter()
+    const detected = cityForCenter([lng, lat])
+    if (detected !== this.city) {
+      this.dispatchEvent(new CustomEvent('city-changed', {
+        detail: { city: detected },
+        bubbles: true,
+        composed: true,
+      }))
+    }
   }
 
   #emitViewportCount() {
@@ -347,6 +364,19 @@ customElements.define('map-view', class extends LitElement {
 
   updated(changed) {
     if (!this.#map || !this.#mapReady) return
+
+    // Fly to new city center when city changes (from store, not from user panning)
+    if (changed.has('city') && this.city && changed.get('city') !== undefined) {
+      const cityDef = CITIES[this.city]
+      if (cityDef) {
+        const currentCenter = this.#map.getCenter()
+        const detected = cityForCenter([currentCenter.lng, currentCenter.lat])
+        // Only fly if the map isn't already in the target city region
+        if (detected !== this.city) {
+          this.#map.flyTo({ center: cityDef.center, zoom: ZOOM, speed: 1.4 })
+        }
+      }
+    }
 
     // Update GeoJSON data when homes or newThisYear change
     if (changed.has('homes') || changed.has('newThisYear') || changed.has('year')) {

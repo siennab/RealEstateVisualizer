@@ -109,6 +109,10 @@ customElements.define('app-shell', class extends LitElement {
     this.requestUpdate()
   }
 
+  #onCityChanged(e) {
+    store.setCity(e.detail.city)
+  }
+
   #onEraSelected(e) {
     const era = e.detail.era
     store.pause()
@@ -172,12 +176,14 @@ customElements.define('app-shell', class extends LitElement {
             .newThisYear=${newSet}
             .theme=${t}
             .year=${s.year}
+            .city=${s.city}
             .isScrubbing=${this.#isScrubbing}
             .isPlaying=${s.playing}
             .activeEra=${eraFor(s.year)?.id}
             @property-selected=${this.#onPropertySelected.bind(this)}
             @map-clicked=${this.#onMapClicked.bind(this)}
             @viewport-count=${this.#onViewportCount.bind(this)}
+            @city-changed=${this.#onCityChanged.bind(this)}
             style="position:absolute;inset:0;"
           ></map-view>
         </div>

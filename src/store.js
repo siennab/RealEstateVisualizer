@@ -1,7 +1,7 @@
 import { ERAS, eraFor } from './data/sample-data.js'
-import { init as initMprop, allRecords } from './services/mprop-data.js'
+import { init as initMprop, allRecords, switchCity, getActiveCity, CITIES } from './services/mprop-data.js'
 
-export { ERAS, eraFor }
+export { ERAS, eraFor, CITIES }
 
 class AppStore {
   #state = {
@@ -11,6 +11,7 @@ class AppStore {
     isolatedEraId: null,
     selectedProperty: null,
     dataReady: false,
+    city: 'mke',
   }
   #listeners = new Set()
   #playTimer = null
@@ -48,6 +49,13 @@ class AppStore {
   clearIsolatedEra() { this.#set({ isolatedEraId: null }) }
   selectProperty(p) { this.#set({ selectedProperty: p }) }
   deselectProperty() { this.#set({ selectedProperty: null }) }
+
+  async setCity(cityId) {
+    if (cityId === this.#state.city) return
+    this.#set({ city: cityId, dataReady: false, selectedProperty: null })
+    await switchCity(cityId)
+    this.#set({ dataReady: true })
+  }
 
   play() {
     if (this.#state.playing) return
