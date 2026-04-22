@@ -75,6 +75,7 @@ customElements.define('map-view', class extends LitElement {
   #mapReady = false
   #currentStyle = null
   #viewportCountTimer = null
+  #resizeObserver = null
 
   connectedCallback() {
     super.connectedCallback()
@@ -84,6 +85,8 @@ customElements.define('map-view', class extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback()
+    this.#resizeObserver?.disconnect()
+    this.#resizeObserver = null
     if (this.#map) {
       this.#map.remove()
       this.#map = null
@@ -119,6 +122,15 @@ customElements.define('map-view', class extends LitElement {
 
     this.#map.on('load', () => {
       this.#mapReady = true
+
+      // Fix mobile first-load half-height: resize once layout has settled
+      this.#map.resize()
+
+      // Keep map in sync with container size changes (e.g. keyboard, orientation)
+      this.#resizeObserver = new ResizeObserver(() => {
+        this.#map?.resize()
+      })
+      this.#resizeObserver.observe(container)
 
       // GeoJSON source for all homes
       // Enable clustering on desktop for better performance, lighter on mobile
